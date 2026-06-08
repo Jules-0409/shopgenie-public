@@ -121,7 +121,6 @@ export default function Home() {
   };
 
   const newChat = () => {
-    setActiveId(null);
     setDraft('');
     setView('welcome');
   };
