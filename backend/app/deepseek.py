@@ -1,11 +1,12 @@
 import logging
+import json
 from typing import Any
 
 import httpx
 
 from app.config import Settings
 from app.prompts import build_system_prompt
-from app.schemas import ChatRequest, ChatResponse, Usage
+from app.schemas import ChatRequest, ChatResponse, ContentSection, GeneratedContent, Usage
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ class DeepSeekClient:
         payload = {
             "model": self.settings.deepseek_model,
             "thinking": {"type": "disabled"},
+            "response_format": {"type": "json_object"},
             "max_tokens": 1200,
             "messages": [
                 {"role": "system", "content": build_system_prompt(request.platform)},
@@ -37,6 +39,7 @@ class DeepSeekClient:
             raise DeepSeekError("DeepSeek 返回了无法解析的响应") from exc
         if not content:
             raise DeepSeekError("DeepSeek 返回了空内容")
+        message, result = self._parse_content(content, request)
 
         usage_data = response_data.get("usage", {})
         usage = Usage(
@@ -45,7 +48,31 @@ class DeepSeekClient:
             total_tokens=usage_data.get("total_tokens", 0),
         )
         logger.info("DeepSeek usage model=%s total_tokens=%s", self.settings.deepseek_model, usage.total_tokens)
-        return ChatResponse(message=content, model=self.settings.deepseek_model, usage=usage)
+        return ChatResponse(message=message, result=result, model=self.settings.deepseek_model, usage=usage)
+
+    def _parse_content(self, content: str, request: ChatRequest) -> tuple[str, GeneratedContent | None]:
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError as exc:
+            raise DeepSeekError("DeepSeek 返回了无法解析的结构化内容") from exc
+        if parsed.get("kind") == "message":
+            message = str(parsed.get("message", "")).strip()
+            if not message:
+                raise DeepSeekError("DeepSeek 返回了空追问")
+            return message, None
+        if parsed.get("kind") != "result":
+            raise DeepSeekError("DeepSeek 返回了未知内容类型")
+        try:
+            result = GeneratedContent(
+                platform=request.platform,
+                title=parsed["title"],
+                body=parsed["body"],
+                tags=parsed.get("tags", []),
+                sections=[ContentSection.model_validate(section) for section in parsed.get("sections", [])],
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise DeepSeekError("DeepSeek 返回的成品结构不完整") from exc
+        return str(parsed.get("message", "已生成可直接使用的内容。")).strip(), result
 
     async def _post(self, payload: dict[str, Any]) -> dict[str, Any]:
         headers = {"Authorization": f"Bearer {self.settings.deepseek_api_key}"}

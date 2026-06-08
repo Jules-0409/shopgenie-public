@@ -1,5 +1,6 @@
 import httpx
 import pytest
+import json
 from pydantic import ValidationError
 
 from app.config import Settings
@@ -19,7 +20,14 @@ async def test_chat_returns_content_and_usage() -> None:
         return httpx.Response(
             200,
             json={
-                "choices": [{"message": {"content": "可直接使用的脚本"}}],
+                "choices": [{"message": {"content": json.dumps({
+                    "kind": "result",
+                    "message": "已生成脚本",
+                    "title": "15秒补水面膜脚本",
+                    "body": "完整脚本正文",
+                    "tags": ["补水"],
+                    "sections": [{"label": "0-3秒 Hook", "content": "开场口播"}],
+                }, ensure_ascii=False)}}],
                 "usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
             },
         )
@@ -27,7 +35,9 @@ async def test_chat_returns_content_and_usage() -> None:
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="https://api.deepseek.com") as client:
         result = await DeepSeekClient(settings(), client).chat(ChatRequest(platform=Platform.DOUYIN, message="写个面膜脚本"))
 
-    assert result.message == "可直接使用的脚本"
+    assert result.message == "已生成脚本"
+    assert result.result is not None
+    assert result.result.sections[0].label == "0-3秒 Hook"
     assert result.usage.total_tokens == 30
 
 
@@ -63,3 +73,14 @@ def test_prompt_forbids_inventing_product_facts() -> None:
     assert "不得从商品名称推断" in prompt
     assert "用户没有明确提供的肤感" in prompt
     assert "少于 3 项时禁止生成成品" in prompt
+    assert '"kind":"result"' in prompt
+
+
+@pytest.mark.asyncio
+async def test_chat_returns_question_without_result() -> None:
+    content = json.dumps({"kind": "message", "message": "请补充产品材质"}, ensure_ascii=False)
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json={"choices": [{"message": {"content": content}}]}))
+    async with httpx.AsyncClient(transport=transport, base_url="https://api.deepseek.com") as client:
+        result = await DeepSeekClient(settings(), client).chat(ChatRequest(platform=Platform.XHS, message="写笔记"))
+    assert result.message == "请补充产品材质"
+    assert result.result is None

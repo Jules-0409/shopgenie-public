@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import ChatBubble, { type Message } from '@/components/ChatBubble';
 import { AmazonMark, BrandMark, DyMark, IconHistory, IconShare, XhsMark } from '@/components/Icons';
 import InputBar from '@/components/InputBar';
-import type { XHSNote } from '@/components/ResultCard';
 import Sidebar, { type ConversationSummary } from '@/components/Sidebar';
 import WelcomeScreen from '@/components/WelcomeScreen';
 import { PLATFORM_LABELS, type Platform } from '@/lib/platforms';
@@ -19,14 +18,14 @@ interface Conversation {
 
 const STORAGE_KEY = 'shopgenie.conversations.v1';
 
-const NOTE: XHSNote = {
-  plat: 'xhs',
-  type: '小红书种草笔记',
+const NOTE = {
+  platform: 'xhs' as const,
   title: '干皮姐妹别划走！敷完这个面膜我室友问我打了水光针 💧',
   body: `这是一个演示样例，用来展示结果卡片长什么样。
 
 真实生成已经接入后端：点击“新对话”，输入你的商品事实，我会基于真实信息生成内容；信息不足时会先追问，不会硬编。`,
   tags: ['面膜推荐', '补水面膜', '敏感肌护肤', '干皮救星'],
+  sections: [],
 };
 
 const DEMO_CONVERSATION: Conversation = {
@@ -172,7 +171,7 @@ export default function Home() {
 
     try {
       const response = await sendChat(requestPlatform, text, history);
-      replacePending(conversationId, pendingMessage.id, { id: `message-${idCounter.current++}`, role: 'ai', text: response.message });
+      replacePending(conversationId, pendingMessage.id, { id: `message-${idCounter.current++}`, role: 'ai', text: response.message, card: response.result ?? undefined });
     } catch (error) {
       const errorText = error instanceof Error ? error.message : '生成失败，请稍后重试';
       replacePending(conversationId, pendingMessage.id, { id: `message-${idCounter.current++}`, role: 'ai', text: errorText, status: 'error' });

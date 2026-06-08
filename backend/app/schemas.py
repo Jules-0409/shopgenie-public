@@ -26,7 +26,21 @@ class Usage(BaseModel):
     total_tokens: int = 0
 
 
+class ContentSection(BaseModel):
+    label: str = Field(min_length=1, max_length=80)
+    content: str = Field(min_length=1, max_length=2000)
+
+
+class GeneratedContent(BaseModel):
+    platform: Platform
+    title: str = Field(min_length=1, max_length=300)
+    body: str = Field(min_length=1, max_length=8000)
+    tags: list[str] = Field(default_factory=list, max_length=20)
+    sections: list[ContentSection] = Field(default_factory=list, max_length=12)
+
+
 class ChatResponse(BaseModel):
     message: str
+    result: GeneratedContent | None = None
     model: str
     usage: Usage

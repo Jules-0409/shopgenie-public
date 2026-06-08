@@ -7,12 +7,26 @@ interface ApiHistoryMessage {
 
 interface ChatApiResponse {
   message: string;
+  result: GeneratedContent | null;
   model: string;
   usage: {
     prompt_tokens: number;
     completion_tokens: number;
     total_tokens: number;
   };
+}
+
+export interface ContentSection {
+  label: string;
+  content: string;
+}
+
+export interface GeneratedContent {
+  platform: Platform;
+  title: string;
+  body: string;
+  tags: string[];
+  sections: ContentSection[];
 }
 
 export async function sendChat(

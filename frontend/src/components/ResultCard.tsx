@@ -1,66 +1,72 @@
 'use client';
 
 import { useState } from 'react';
-import { IconCamera, IconCopy, IconEdit, IconRefresh, XhsMark } from './Icons';
-import type { Platform } from '@/lib/platforms';
+import { AmazonMark, DyMark, IconCopy, IconEdit, IconRefresh, XhsMark } from './Icons';
+import type { GeneratedContent } from '@/lib/api';
+import { PLATFORM_LABELS, type Platform } from '@/lib/platforms';
 
-export interface XHSNote {
-  plat: Platform;
-  type: string;
-  title: string;
-  body: string;
-  tags: string[];
-}
+const PlatformIcon = ({ platform }: { platform: Platform }) => {
+  if (platform === 'xhs') return <XhsMark />;
+  if (platform === 'dy') return <DyMark />;
+  return <AmazonMark />;
+};
 
-export default function ResultCard({ card }: { card: XHSNote }) {
+const XhsPreview = ({ card }: { card: GeneratedContent }) => (
+  <div className="app-preview xhs-app-preview">
+    <div className="app-profile"><span>美</span><div><strong>XX美妆旗舰店</strong><small>上海 · 刚刚</small></div><b>关注</b></div>
+    <div className="xhs-preview-cover"><span>封面图建议</span><strong>{card.title}</strong></div>
+    <div className="app-content"><h2>{card.title}</h2><div className="app-body">{card.body}</div><div className="post-tags">{card.tags.map((tag) => <span className="post-tag" key={tag}>#{tag}</span>)}</div></div>
+  </div>
+);
+
+const DouyinPreview = ({ card }: { card: GeneratedContent }) => (
+  <div className="app-preview douyin-app-preview">
+    <div className="dy-video-stage"><span className="dy-duration">脚本预览</span><div className="dy-play">▶</div><h2>{card.title}</h2></div>
+    <div className="dy-script-panel">
+      {(card.sections.length ? card.sections : [{ label: '完整脚本', content: card.body }]).map((section) => (
+        <div className="script-section" key={section.label}><b>{section.label}</b><p>{section.content}</p></div>
+      ))}
+    </div>
+  </div>
+);
+
+const AmazonPreview = ({ card }: { card: GeneratedContent }) => (
+  <div className="app-preview amazon-app-preview">
+    <div className="amazon-app-header"><AmazonMark s={16} /> amazon <span>Search products</span></div>
+    <div className="amazon-product">
+      <div className="amazon-image">Product image</div>
+      <div className="amazon-detail"><h2>{card.title}</h2><div className="amazon-rating">★★★★★</div><strong>About this item</strong>
+        <ul>{(card.sections.length ? card.sections : [{ label: 'Product description', content: card.body }]).map((section) => <li key={section.label}><b>{section.label}:</b> {section.content}</li>)}</ul>
+        <p>{card.body}</p>
+      </div>
+    </div>
+  </div>
+);
+
+export default function ResultCard({ card }: { card: GeneratedContent }) {
   const [copied, setCopied] = useState(false);
-
   const copy = async () => {
-    const content = `${card.title}\n\n${card.body}\n\n${card.tags.map((tag) => `#${tag}`).join(' ')}`;
-    await navigator.clipboard.writeText(content);
+    await navigator.clipboard.writeText(`${card.title}\n\n${card.body}\n\n${card.tags.map((tag) => `#${tag}`).join(' ')}`);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1800);
   };
 
   return (
-    <article className="result-card">
+    <article className={`result-card result-${card.platform}`}>
       <header className="result-toolbar">
-        <div className="result-type"><XhsMark /> {card.type}</div>
+        <div className="result-type"><PlatformIcon platform={card.platform} /> {PLATFORM_LABELS[card.platform]}应用预览</div>
         <div className="result-actions">
           <button className="action-button"><IconRefresh /> 再来一版</button>
           <button className="action-button"><IconEdit /> 编辑</button>
           <button className="action-button primary" onClick={copy}><IconCopy /> {copied ? '已复制' : '复制全文'}</button>
         </div>
       </header>
-
-      <div className="result-body">
-        <div className="cover-panel">
-          <div className="post-author">
-            <div className="post-avatar">美</div>
-            <div><strong>XX美妆旗舰店</strong><span>上海 · 刚刚</span></div>
-          </div>
-          <div className="cover-idea">
-            <div className="cover-camera"><IconCamera /></div>
-            <strong>真实分享，更容易被相信</strong>
-            <span>建议使用敷前 / 敷后对比图作为首图</span>
-          </div>
-          <div className="cover-meta"><span>封面灵感</span><span>01 / 04</span></div>
-        </div>
-
-        <div className="post-panel">
-          <div className="post-kicker">Ready to publish</div>
-          <h2 className="post-title">{card.title}</h2>
-          <div className="post-copy">{card.body}</div>
-          <div className="post-tags">{card.tags.map((tag) => <span className="post-tag" key={tag}>#{tag}</span>)}</div>
-        </div>
+      <div className="result-stage">
+        {card.platform === 'xhs' && <XhsPreview card={card} />}
+        {card.platform === 'dy' && <DouyinPreview card={card} />}
+        {card.platform === 'amazon' && <AmazonPreview card={card} />}
       </div>
-
-      <footer className="result-footer">
-        <span className="check">✓ 违禁词通过</span>
-        <span className="check">✓ 平台规则合规</span>
-        <span className="check">✓ {card.tags.length} 个标签已优化</span>
-        <span className="tip">建议晚 8–10 点发布，前 30 分钟积极回复评论</span>
-      </footer>
+      <footer className="result-footer"><span className="check">✓ 信息结构通过</span><span className="check">✓ 平台格式已适配</span><span className="tip">生成内容请在发布前核对产品事实</span></footer>
     </article>
   );
 }
