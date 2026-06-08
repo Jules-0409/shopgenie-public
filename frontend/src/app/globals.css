@@ -97,6 +97,10 @@ button { color: inherit; }
 .message-row.user .message-column { align-items: flex-end; }
 .bubble { width: fit-content; max-width: 680px; padding: 12px 15px; border: 1px solid var(--line); border-radius: 15px 15px 15px 4px; background: rgba(255, 254, 250, .94); font-family: 'Noto Sans SC', sans-serif; font-size: 13.5px; line-height: 1.75; white-space: pre-line; box-shadow: var(--shadow-sm); }
 .message-row.user .bubble { border-color: var(--ink); border-radius: 15px 15px 4px 15px; background: var(--ink); color: white; box-shadow: 0 8px 24px rgba(25,24,22,.12); }
+.bubble.pending { color: var(--muted); }
+.bubble.error { border-color: #efc4c4; background: #fff5f5; color: #9b3434; }
+.typing-dot { width: 6px; height: 6px; display: inline-block; margin-right: 8px; border-radius: 50%; background: var(--xhs); box-shadow: 10px 0 0 #e3a52f, 20px 0 0 #66876d; animation: pulse 1.1s infinite ease-in-out; }
+@keyframes pulse { 50% { opacity: .35; transform: translateY(-1px); } }
 
 /* Result */
 .result-card { width: min(100%, 820px); overflow: hidden; border: 1px solid var(--line); border-radius: 18px; background: var(--surface-strong); box-shadow: var(--shadow-lg); }

@@ -5,5 +5,8 @@
 node_modules/
 .next/
 coverage/
+.venv/
+__pycache__/
+*.pyc
 *.log
 .frontend-git-backup/

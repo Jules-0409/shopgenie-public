@@ -8,6 +8,7 @@ import type { XHSNote } from '@/components/ResultCard';
 import Sidebar from '@/components/Sidebar';
 import WelcomeScreen from '@/components/WelcomeScreen';
 import { PLATFORM_LABELS, PLATFORM_TITLES, type Platform } from '@/lib/platforms';
+import { sendChat } from '@/lib/api';
 
 const NOTE: XHSNote = {
   plat: 'xhs',
@@ -33,10 +34,10 @@ const NOTE: XHSNote = {
 };
 
 const SEED_MESSAGES: Message[] = [
-  { id: 1, role: 'user', text: '帮我写个小红书笔记，玻尿酸补水面膜，真实分享风格' },
-  { id: 2, role: 'ai', text: '好，给你写了一篇真实分享型的种草笔记。', card: NOTE },
-  { id: 3, role: 'user', text: '标题能更抓人一点吗？有没有其他版本？' },
-  { id: 4, role: 'ai', text: `当然，给你 3 个备选标题，风格各不同：
+  { id: 1, role: 'user', text: '帮我写个小红书笔记，玻尿酸补水面膜，真实分享风格', demo: true },
+  { id: 2, role: 'ai', text: '好，给你写了一篇真实分享型的种草笔记。', card: NOTE, demo: true },
+  { id: 3, role: 'user', text: '标题能更抓人一点吗？有没有其他版本？', demo: true },
+  { id: 4, role: 'ai', demo: true, text: `当然，给你 3 个备选标题，风格各不同：
 
 ① 敷了7天才明白，为什么干皮都在偷偷囤这个面膜
 ② 脸干到起皮然后我试了这个……结果真的出乎意料
@@ -49,6 +50,7 @@ export default function Home() {
   const [activeId, setActiveId] = useState<number | null>(1);
   const [messages, setMessages] = useState(SEED_MESSAGES);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [pending, setPending] = useState(false);
   const [view, setView] = useState<'chat' | 'welcome'>('chat');
   const [platform, setPlatform] = useState<Platform>('xhs');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -67,9 +69,36 @@ export default function Home() {
     setView('welcome');
   };
 
-  const send = (text: string) => {
+  const send = async (text: string) => {
+    if (pending) return;
     setView('chat');
-    setMessages((current) => [...current, { id: Date.now(), role: 'user', text }]);
+    setPending(true);
+    const userMessage: Message = { id: Date.now(), role: 'user', text };
+    const pendingMessage: Message = { id: Date.now() + 1, role: 'ai', text: '正在为你生成可直接使用的内容…', status: 'pending' };
+    setMessages((current) => [...current, userMessage, pendingMessage]);
+
+    try {
+      const history = messages.filter((message) => !message.demo && !message.status).slice(-10).map((message) => ({
+        role: message.role === 'ai' ? 'assistant' as const : 'user' as const,
+        content: message.text,
+      }));
+      const response = await sendChat(platform, text, history);
+      setMessages((current) => [...current.filter((message) => message.id !== pendingMessage.id), {
+        id: Date.now() + 2,
+        role: 'ai',
+        text: response.message,
+      }]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '生成失败，请稍后重试';
+      setMessages((current) => [...current.filter((item) => item.id !== pendingMessage.id), {
+        id: Date.now() + 2,
+        role: 'ai',
+        text: message,
+        status: 'error',
+      }]);
+    } finally {
+      setPending(false);
+    }
   };
 
   return (
@@ -105,7 +134,7 @@ export default function Home() {
           </div>
         ) : <WelcomeScreen onAction={() => openChat(1)} />}
 
-        <InputBar onPlat={setPlatform} onSend={send} plat={platform} />
+        <InputBar onPlat={setPlatform} onSend={send} pending={pending} plat={platform} />
       </main>
     </div>
   );

@@ -6,16 +6,17 @@ import type { Platform } from '@/lib/platforms';
 
 interface InputBarProps {
   plat: Platform;
+  pending: boolean;
   onPlat: (platform: Platform) => void;
   onSend: (text: string) => void;
 }
 
-export default function InputBar({ plat, onPlat, onSend }: InputBarProps) {
+export default function InputBar({ plat, pending, onPlat, onSend }: InputBarProps) {
   const [text, setText] = useState('');
 
   const submit = () => {
     const value = text.trim();
-    if (!value) return;
+    if (!value || pending) return;
     onSend(value);
     setText('');
   };
@@ -46,7 +47,7 @@ export default function InputBar({ plat, onPlat, onSend }: InputBarProps) {
         <div className="composer-footer">
           <span>Enter 发送 · Shift + Enter 换行</span>
           <span className="count">{text.length} / 500</span>
-          <button aria-label="发送消息" className="send-button" disabled={!text.trim()} onClick={submit}><IconSend /></button>
+          <button aria-label="发送消息" className="send-button" disabled={!text.trim() || pending} onClick={submit}><IconSend /></button>
         </div>
       </div>
     </div>

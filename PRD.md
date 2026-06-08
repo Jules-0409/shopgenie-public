@@ -304,7 +304,7 @@ V3 需要接入平台 API，复杂度高，但价值也最大。
 |----|------|------|
 | 前端 | Next.js + TailwindCSS | 快速搭建，Chat UI 生态成熟 |
 | 后端 | FastAPI (Python) | 简单直接，LLM 生态库多 |
-| LLM | DeepSeek V3 | 中文能力强、成本低、OpenAI 兼容格式 |
+| LLM | DeepSeek V4 Flash | 中文能力强、成本低、OpenAI 兼容格式 |
 | 数据库 | SQLite (V1) | 零配置，一个人用够了 |
 | 平台规则 | YAML 配置文件 | 改规则不改代码 |
 | 部署 | Docker | 后续扩展方便 |
