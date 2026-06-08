@@ -137,12 +137,7 @@ button { color: inherit; }
 .composer-area { flex: 0 0 auto; padding: 12px 28px 22px; background: linear-gradient(to bottom, rgba(243,240,235,0), var(--canvas) 25%); }
 .composer { width: min(100%, 900px); overflow: hidden; margin: auto; border: 1px solid #d4cdc4; border-radius: 17px; background: rgba(255, 254, 250, .96); box-shadow: 0 12px 38px rgba(45, 37, 28, .1); transition: .18s ease; }
 .composer:focus-within { border-color: #9f968c; box-shadow: 0 16px 44px rgba(45, 37, 28, .14); }
-.composer-top { display: flex; align-items: center; gap: 5px; padding: 10px 12px 0; }
-.platform-tab { display: flex; align-items: center; gap: 5px; padding: 5px 8px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--faint); font-size: 11px; font-weight: 700; cursor: pointer; }
-.platform-tab.active-xhs { border-color: #ffd0d6; background: #fff4f5; color: var(--xhs); }
-.platform-tab.active-dy { border-color: #dedbd7; background: #f1f0ee; color: var(--ink); }
-.platform-tab.active-amazon { border-color: #ffd08a; background: #fff8eb; color: #7a4a00; }
-.composer textarea { width: 100%; min-height: 62px; max-height: 140px; resize: none; padding: 10px 14px 4px; border: 0; outline: 0; background: transparent; color: var(--ink); font-family: 'Noto Sans SC', sans-serif; font-size: 13.5px; line-height: 1.7; }
+.composer textarea { width: 100%; min-height: 78px; max-height: 140px; resize: none; padding: 14px 14px 4px; border: 0; outline: 0; background: transparent; color: var(--ink); font-family: 'Noto Sans SC', sans-serif; font-size: 13.5px; line-height: 1.7; }
 .composer textarea::placeholder { color: var(--faint); }
 .composer-footer { display: flex; align-items: center; gap: 10px; padding: 7px 10px 10px 14px; color: var(--faint); font-size: 10.5px; }
 .composer-footer .count { margin-left: auto; }

@@ -131,20 +131,6 @@ export default function Home() {
     setActiveId(conversation.id);
   };
 
-  const changePlatform = (nextPlatform: Platform) => {
-    if (!activeId) {
-      const conversation = createConversation(nextPlatform);
-      setDraft(starterText[nextPlatform]);
-      setActiveId(conversation.id);
-      return;
-    }
-    setConversations((current) => current.map((conversation) => (
-      conversation.id === activeId
-        ? { ...conversation, platform: nextPlatform, title: conversation.messages.length === 0 ? `${PLATFORM_LABELS[nextPlatform]} 新对话` : conversation.title }
-        : conversation
-    )));
-  };
-
   const appendMessage = (conversationId: string, message: Message) => {
     setConversations((current) => current.map((conversation) => (
       conversation.id === conversationId
@@ -231,7 +217,7 @@ export default function Home() {
           </div>
         ) : <WelcomeScreen onAction={startFromAction} />}
 
-        <InputBar onPlat={changePlatform} onSend={send} onTextChange={setDraft} pending={pending} plat={platform} text={draft} />
+        <InputBar onSend={send} onTextChange={setDraft} pending={pending} text={draft} />
       </main>
     </div>
   );

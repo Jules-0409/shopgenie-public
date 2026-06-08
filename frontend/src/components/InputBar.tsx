@@ -1,19 +1,16 @@
 'use client';
 
 import type { KeyboardEvent } from 'react';
-import { AmazonMark, DyMark, IconSend, XhsMark } from './Icons';
-import type { Platform } from '@/lib/platforms';
+import { IconSend } from './Icons';
 
 interface InputBarProps {
-  plat: Platform;
   pending: boolean;
   text: string;
-  onPlat: (platform: Platform) => void;
   onSend: (text: string) => void;
   onTextChange: (text: string) => void;
 }
 
-export default function InputBar({ plat, pending, text, onPlat, onSend, onTextChange }: InputBarProps) {
+export default function InputBar({ pending, text, onSend, onTextChange }: InputBarProps) {
   const submit = () => {
     const value = text.trim();
     if (!value || pending) return;
@@ -31,11 +28,6 @@ export default function InputBar({ plat, pending, text, onPlat, onSend, onTextCh
   return (
     <div className="composer-area">
       <div className="composer">
-        <div className="composer-top">
-          <button className={`platform-tab ${plat === 'xhs' ? 'active-xhs' : ''}`} onClick={() => onPlat('xhs')}><XhsMark /> 小红书</button>
-          <button className={`platform-tab ${plat === 'dy' ? 'active-dy' : ''}`} onClick={() => onPlat('dy')}><DyMark /> 抖音</button>
-          <button className={`platform-tab ${plat === 'amazon' ? 'active-amazon' : ''}`} onClick={() => onPlat('amazon')}><AmazonMark /> Amazon</button>
-        </div>
         <textarea
           maxLength={500}
           onChange={(event) => onTextChange(event.target.value)}
