@@ -44,6 +44,7 @@ class ChatResponse(BaseModel):
     message: str
     result: GeneratedContent | None = None
     questions: list[dict[str, Any]] | None = None
+    warnings: list[str] | None = None
     conversation_title: str | None = None
     model: str
     usage: Usage

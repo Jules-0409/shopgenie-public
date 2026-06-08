@@ -5,6 +5,7 @@ from typing import Any
 import httpx
 
 from app.config import Settings
+from app.postprocess import post_process
 from app.prompts import build_system_prompt
 from app.schemas import ChatRequest, ChatResponse, ContentSection, GeneratedContent, Usage
 
@@ -49,12 +50,22 @@ class DeepSeekClient:
         logger.info("DeepSeek usage model=%s total_tokens=%s", self.settings.deepseek_model, usage.total_tokens)
         conversation_title = self._parse_title(content)
         questions = self._parse_questions(content)
-        return ChatResponse(message=message, result=result, questions=questions, conversation_title=conversation_title, model=self.settings.deepseek_model, usage=usage)
+        warnings = None
+        if result is not None:
+            pp = post_process(result)
+            if pp.warnings:
+                warnings = pp.warnings
+        return ChatResponse(message=message, result=result, questions=questions, warnings=warnings, conversation_title=conversation_title, model=self.settings.deepseek_model, usage=usage)
 
     def _parse_content(self, content: str, request: ChatRequest) -> tuple[str, GeneratedContent | None]:
         parsed = self._try_parse_json(content)
         if parsed is None:
             raise DeepSeekError("DeepSeek 返回了无法解析的结构化内容")
+        if parsed.get("kind") == "chat":
+            message = str(parsed.get("message", "")).strip()
+            if not message:
+                raise DeepSeekError("DeepSeek 返回了空回复")
+            return message, None
         if parsed.get("kind") == "message":
             message = str(parsed.get("message", "")).strip()
             if not message:
