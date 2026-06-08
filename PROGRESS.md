@@ -54,6 +54,16 @@ M0 前端基础已完成。V3 设计稿已转为可响应式使用的 Next.js Ch
 
 ## 执行日志
 
+### 2026-06-08（续）
+- ⚠️ Prompt 策略调整：原"少于 3 项产品事实禁止生成"规则过于严格，用户仅输入品类时被反复追问无法预览，体验差。
+- 重写 BASE_PROMPT：三级生成策略（信息充足→直接成品 / 信息有限→草稿+反问 / 信息极少→通用草稿+带选项反问）。
+- 新增 `kind:"draft"` 输出类型：草稿正文含 [待补充] 标记，附带 questions 数组（2-4 选项 + 自定义）。
+- 修复 Amazon 对话语言问题：原 Prompt 未区分"对话沟通"与"生成内容"，DeepSeek 对中文用户也用英文追问。
+- Amazon 平台 Prompt 加入明确语言规则：对话沟通中文，Listing 正文英文。
+- deepseek.py `_parse_content` 支持解析 `kind:"draft"`，与 `result` 共用内容结构。
+- 测试更新：`test_prompt_forbids_inventing_product_facts` 适配新 Prompt 措辞；新增 `test_amazon_prompt_mandates_english_listing`。
+- 验证：后端 8 个测试全部通过。
+
 ### 2026-06-08
 - 完成 V3 UI 设计稿评审，选定 V3 方案
 - 开始从前端搭建项目

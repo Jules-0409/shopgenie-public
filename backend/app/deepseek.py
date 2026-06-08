@@ -60,19 +60,19 @@ class DeepSeekClient:
             if not message:
                 raise DeepSeekError("DeepSeek 返回了空追问")
             return message, None
-        if parsed.get("kind") != "result":
-            raise DeepSeekError("DeepSeek 返回了未知内容类型")
-        try:
-            result = GeneratedContent(
-                platform=request.platform,
-                title=parsed["title"],
-                body=parsed["body"],
-                tags=parsed.get("tags", []),
-                sections=[ContentSection.model_validate(section) for section in parsed.get("sections", [])],
-            )
-        except (KeyError, TypeError, ValueError) as exc:
-            raise DeepSeekError("DeepSeek 返回的成品结构不完整") from exc
-        return str(parsed.get("message", "已生成可直接使用的内容。")).strip(), result
+        if parsed.get("kind") in ("result", "draft"):
+            try:
+                result = GeneratedContent(
+                    platform=request.platform,
+                    title=parsed["title"],
+                    body=parsed["body"],
+                    tags=parsed.get("tags", []),
+                    sections=[ContentSection.model_validate(section) for section in parsed.get("sections", [])],
+                )
+            except (KeyError, TypeError, ValueError) as exc:
+                raise DeepSeekError("DeepSeek 返回的成品结构不完整") from exc
+            return str(parsed.get("message", "已生成可直接使用的内容。")).strip(), result
+        raise DeepSeekError("DeepSeek 返回了未知内容类型")
 
     async def _post(self, payload: dict[str, Any]) -> dict[str, Any]:
         headers = {"Authorization": f"Bearer {self.settings.deepseek_api_key}"}

@@ -70,10 +70,18 @@ def test_chat_rejects_oversized_message() -> None:
 def test_prompt_forbids_inventing_product_facts() -> None:
     prompt = build_system_prompt(Platform.DOUYIN)
     assert "只能使用用户消息中明确提供的产品事实" in prompt
-    assert "不得从商品名称推断" in prompt
+    assert "不得凭空捏造" in prompt
     assert "用户没有明确提供的肤感" in prompt
-    assert "少于 3 项时禁止生成成品" in prompt
+    assert '"kind":"draft"' in prompt
     assert '"kind":"result"' in prompt
+    assert "与用户的对话沟通一律使用中文" in prompt
+
+
+def test_amazon_prompt_mandates_english_listing() -> None:
+    prompt = build_system_prompt(Platform.AMAZON)
+    assert "对话沟通使用中文" in prompt
+    assert "英文" in prompt
+    assert "英语消费者" in prompt
 
 
 @pytest.mark.asyncio
