@@ -80,6 +80,13 @@ M0 前端基础已完成。V3 设计稿已转为可响应式使用的 Next.js Ch
 - ChatResponse 新增 warnings 字段，后处理结果透传给前端。
 - Prompt 补充抖音小店文案内容类型。
 - 验证：后端 13 测试通过（8 chat + 5 postprocess）。
+- 前端 warnings 展示：ChatBubble 新增 WarningBanner 组件，违禁词警告以黄色提示条显示。
+- 前端 pulse keyframes 清理：移除废弃的 pulse 动画，统一使用 typing-bounce。
+- 记忆系统（SQLite）：新增 memory.py 模块，UserProfile 数据类（品牌名/品类/人群/调性/风格/平台/禁忌词/备注），CRUD 操作。
+- 后端 /api/profile 端点：GET 获取、POST 保存、DELETE 删除。
+- Prompt 注入记忆：DeepSeekClient 接受 profile 参数，build_memory_prompt 将品牌档案注入系统提示。
+- 前端品牌档案面板：ProfilePanel 组件（模态框），支持编辑所有字段，顶栏 📋 按钮打开。
+- 验证：后端 21 测试通过（8 chat + 8 memory + 5 postprocess）；前端 build 通过。
 
 ### 2026-06-08
 - 完成 V3 UI 设计稿评审，选定 V3 方案
