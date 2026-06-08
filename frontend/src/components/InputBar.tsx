@@ -1,24 +1,24 @@
 'use client';
 
-import { useState, type KeyboardEvent } from 'react';
+import type { KeyboardEvent } from 'react';
 import { AmazonMark, DyMark, IconSend, XhsMark } from './Icons';
 import type { Platform } from '@/lib/platforms';
 
 interface InputBarProps {
   plat: Platform;
   pending: boolean;
+  text: string;
   onPlat: (platform: Platform) => void;
   onSend: (text: string) => void;
+  onTextChange: (text: string) => void;
 }
 
-export default function InputBar({ plat, pending, onPlat, onSend }: InputBarProps) {
-  const [text, setText] = useState('');
-
+export default function InputBar({ plat, pending, text, onPlat, onSend, onTextChange }: InputBarProps) {
   const submit = () => {
     const value = text.trim();
     if (!value || pending) return;
     onSend(value);
-    setText('');
+    onTextChange('');
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -38,7 +38,7 @@ export default function InputBar({ plat, pending, onPlat, onSend }: InputBarProp
         </div>
         <textarea
           maxLength={500}
-          onChange={(event) => setText(event.target.value)}
+          onChange={(event) => onTextChange(event.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="继续和我说，或告诉我新商品信息…"
           rows={2}

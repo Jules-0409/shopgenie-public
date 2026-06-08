@@ -3,7 +3,7 @@
 import ResultCard, { type XHSNote } from './ResultCard';
 
 export interface Message {
-  id: number;
+  id: string;
   role: 'user' | 'ai';
   text: string;
   card?: XHSNote;
