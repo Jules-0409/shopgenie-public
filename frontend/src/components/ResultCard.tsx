@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import { IconCamera, IconCopy, IconEdit, IconRefresh, XhsMark } from './Icons';
+import type { Platform } from '@/lib/platforms';
 
 export interface XHSNote {
-  plat: 'xhs' | 'dy';
+  plat: Platform;
   type: string;
   title: string;
   body: string;

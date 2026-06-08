@@ -23,6 +23,14 @@ export const DyMark = ({ s = 12 }: { s?: number }) => (
   </svg>
 );
 
+export const AmazonMark = ({ s = 12 }: { s?: number }) => (
+  <svg width={s} height={s} viewBox="0 0 200 200" style={{ borderRadius: 2, overflow: 'hidden' }}>
+    <rect width="200" height="200" fill="#131A22" />
+    <text x="100" y="126" textAnchor="middle" fontSize="112" fontWeight="700" fill="white" fontFamily="Arial, sans-serif">a</text>
+    <path d="M52 145c27 19 63 22 96 4" fill="none" stroke="#FF9900" strokeWidth="12" strokeLinecap="round" />
+  </svg>
+);
+
 export const IconPlus = () => (
   <svg width="12" height="12" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5" fill="none">
     <path d="M12 5v14M5 12h14" />

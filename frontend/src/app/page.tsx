@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState } from 'react';
 import ChatBubble, { type Message } from '@/components/ChatBubble';
-import { BrandMark, DyMark, IconHistory, IconShare, XhsMark } from '@/components/Icons';
+import { AmazonMark, BrandMark, DyMark, IconHistory, IconShare, XhsMark } from '@/components/Icons';
 import InputBar from '@/components/InputBar';
 import type { XHSNote } from '@/components/ResultCard';
 import Sidebar from '@/components/Sidebar';
 import WelcomeScreen from '@/components/WelcomeScreen';
+import { PLATFORM_LABELS, PLATFORM_TITLES, type Platform } from '@/lib/platforms';
 
 const NOTE: XHSNote = {
   plat: 'xhs',
@@ -49,7 +50,7 @@ export default function Home() {
   const [messages, setMessages] = useState(SEED_MESSAGES);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [view, setView] = useState<'chat' | 'welcome'>('chat');
-  const [platform, setPlatform] = useState<'xhs' | 'dy'>('xhs');
+  const [platform, setPlatform] = useState<Platform>('xhs');
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -80,11 +81,13 @@ export default function Home() {
             <button aria-label="打开导航" className="icon-button mobile-menu" onClick={() => setMobileNavOpen(true)}><BrandMark s={18} /></button>
             {view === 'chat' ? (
               <>
-                <span className={`platform-pill ${platform === 'dy' ? 'dy' : ''}`}>
-                  {platform === 'xhs' ? <XhsMark /> : <DyMark />}
-                  {platform === 'xhs' ? '小红书' : '抖音'}
+                <span className={`platform-pill ${platform}`}>
+                  {platform === 'xhs' && <XhsMark />}
+                  {platform === 'dy' && <DyMark />}
+                  {platform === 'amazon' && <AmazonMark />}
+                  {PLATFORM_LABELS[platform]}
                 </span>
-                <span className="topbar-title">玻尿酸补水面膜 · 种草笔记</span>
+                <span className="topbar-title">{PLATFORM_TITLES[platform]}</span>
                 <button aria-label="查看历史" className="icon-button optional"><IconHistory /></button>
                 <button aria-label="分享对话" className="icon-button optional"><IconShare /></button>
               </>
