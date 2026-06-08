@@ -163,7 +163,7 @@ export default function Home() {
     const controller = new AbortController();
     abortRef.current = controller;
     const userMessage: Message = { id: `message-${idCounter.current++}`, role: 'user', text };
-    const pendingMessage: Message = { id: `message-${idCounter.current++}`, role: 'ai', text: '正在为你生成可直接使用的内容…', status: 'pending' };
+    const pendingMessage: Message = { id: `message-${idCounter.current++}`, role: 'ai', text: '', status: 'pending' };
     appendMessage(conversationId, userMessage);
     appendMessage(conversationId, pendingMessage);
     setConversations((current) => current.map((item) => (

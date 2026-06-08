@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import ResultCard from './ResultCard';
 import type { GeneratedContent } from '@/lib/api';
 
@@ -30,21 +31,64 @@ function renderText(text: string) {
   });
 }
 
-function QuestionChips({ questions, onSelect }: { questions: Question[]; onSelect: (text: string) => void }) {
+function QuestionChips({ questions, onSubmit }: { questions: Question[]; onSubmit: (text: string) => void }) {
+  const [selections, setSelections] = useState<Record<number, string[]>>({});
+  const [customInputs, setCustomInputs] = useState<Record<number, string>>({});
+
+  const toggle = (questionIndex: number, option: string) => {
+    setSelections((prev) => {
+      const current = prev[questionIndex] ?? [];
+      const exists = current.includes(option);
+      return { ...prev, [questionIndex]: exists ? current.filter((o) => o !== option) : [...current, option] };
+    });
+  };
+
+  const hasSelections = Object.values(selections).some((s) => s.length > 0) || Object.values(customInputs).some((s) => s.trim());
+
+  const submit = () => {
+    const parts: string[] = [];
+    questions.forEach((q, index) => {
+      const selected = selections[index] ?? [];
+      const custom = customInputs[index]?.trim();
+      if (selected.length > 0 || custom) {
+        const answers = [...selected];
+        if (custom) answers.push(custom);
+        parts.push(`${q.question}：${answers.join('、')}`);
+      }
+    });
+    if (parts.length > 0) onSubmit(parts.join('\n'));
+  };
+
   return (
     <div className="question-chips">
       {questions.map((q, index) => (
         <div key={index} className="question-group">
           <div className="question-label">{q.question}</div>
           <div className="question-options">
-            {q.options.map((option, optionIndex) => (
-              <button key={optionIndex} className="question-option" onClick={() => onSelect(option)}>
-                {option}
-              </button>
-            ))}
+            {q.options.map((option, optionIndex) => {
+              const selected = (selections[index] ?? []).includes(option);
+              return (
+                <button
+                  key={optionIndex}
+                  className={`question-option${selected ? ' selected' : ''}`}
+                  onClick={() => toggle(index, option)}
+                >
+                  {option}
+                </button>
+              );
+            })}
           </div>
+          <input
+            className="question-custom-input"
+            placeholder="自定义填写…"
+            value={customInputs[index] ?? ''}
+            onChange={(e) => setCustomInputs((prev) => ({ ...prev, [index]: e.target.value }))}
+          />
         </div>
       ))}
+      <button className="question-submit" disabled={!hasSelections} onClick={submit}>
+        确认选择
+      </button>
     </div>
   );
 }
@@ -58,9 +102,14 @@ export default function ChatBubble({ msg, onOptionSelect, onRegenerate }: {
     <div className={`message-row ${msg.role === 'user' ? 'user' : ''}`}>
       <div className="message-column">
         {msg.text && <div className={`bubble ${msg.status ?? ''}`}>{msg.status === 'pending' && <span className="typing-dot" />}{renderText(msg.text)}</div>}
+        {!msg.text && msg.status === 'pending' && (
+          <div className="bubble pending typing-indicator">
+            <span className="typing-dot" /><span className="typing-dot" /><span className="typing-dot" />
+          </div>
+        )}
         {msg.card && <ResultCard card={msg.card} />}
         {msg.questions && msg.questions.length > 0 && onOptionSelect && (
-          <QuestionChips questions={msg.questions} onSelect={onOptionSelect} />
+          <QuestionChips questions={msg.questions} onSubmit={onOptionSelect} />
         )}
         {msg.role === 'ai' && !msg.status && !msg.demo && onRegenerate && (
           <button className="regenerate-button" onClick={onRegenerate}>

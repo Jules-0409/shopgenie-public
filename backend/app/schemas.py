@@ -35,7 +35,7 @@ class ContentSection(BaseModel):
 class GeneratedContent(BaseModel):
     platform: Platform
     title: str = Field(min_length=1, max_length=300)
-    body: str = Field(min_length=1, max_length=8000)
+    body: str = Field(max_length=8000)
     tags: list[str] = Field(default_factory=list, max_length=20)
     sections: list[ContentSection] = Field(default_factory=list, max_length=12)
 
