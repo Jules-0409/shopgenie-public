@@ -29,41 +29,79 @@
 
 1. **简单优先** — 不过度设计。LLM 自己判断该干什么，不需要复杂 Router/编排层。
 2. **Prompt 质量是核心** — 不搞花哨的架构，靠 Prompt 质量决定 Agent 能力。
-3. **平台规则外置** — 各平台规则用 YAML 配置，改规则不改代码。
-4. **记忆持久化** — 用户偏好、品牌信息跨会话保存，越用越懂用户。
+3. **平台规则内嵌 Prompt** — 各平台规则直接写在 `prompts.py` 的 `PLATFORM_PROMPTS` 中，改 prompt 改一处。
+4. **记忆持久化** — 用户偏好、品牌信息通过 SQLite 跨会话保存，越用越懂用户。
 
 ---
 
-## 4. 扩展配方
+## 4. 当前模块结构
 
-### 4.1 加一个平台
-1. 在 `platform_rules/` 下新建 YAML 配置文件（标题限制、风格、违禁词等）。
-2. PromptEngine 自动加载，不需要改代码。
-3. 加 few-shot 示例（3-5 个高质量样本）。
-4. 测试该平台的生成质量。
+### 后端 (`backend/app/`)
 
-### 4.2 加一个内容类型
-1. 在 `tools/` 下新增工具函数。
-2. 注册到 function calling 工具列表。
-3. 写对应的 prompt 模板。
-4. 加后处理规则（如有新的违禁词/格式要求）。
+| 模块 | 职责 |
+|------|------|
+| `main.py` | FastAPI 入口，路由：/health、/api/chat、/api/profile |
+| `config.py` | Pydantic Settings，从 .env 读取 DeepSeek 配置 |
+| `prompts.py` | 系统 Prompt（人设 + 生成策略 + JSON 格式），三平台 Prompt |
+| `deepseek.py` | DeepSeek API 客户端，JSON 解析（支持 result/draft/chat/message），markdown 剥离 |
+| `schemas.py` | Pydantic 模型：ChatRequest、ChatResponse、GeneratedContent、UserProfile |
+| `memory.py` | SQLite 记忆系统：UserProfile CRUD，Prompt 注入 |
+| `postprocess.py` | 后处理：违禁词检测（广告法 + 平台规则）、平台内容规范检查 |
+
+### 前端 (`frontend/src/`)
+
+| 模块 | 职责 |
+|------|------|
+| `app/page.tsx` | 主页面：会话管理、消息收发、AbortController、regenerate |
+| `components/ChatBubble.tsx` | 消息气泡：闲聊/草稿/结果渲染、QuestionChips 多选、WarningBanner |
+| `components/ResultCard.tsx` | 生成结果卡片：小红书/抖音/Amazon 高保真预览 |
+| `components/InputBar.tsx` | 输入框：发送/停止按钮 |
+| `components/ProfilePanel.tsx` | 品牌档案管理面板（模态框） |
+| `components/Sidebar.tsx` | 侧栏：会话列表 |
+| `components/WelcomeScreen.tsx` | 平台选择页 |
+| `lib/api.ts` | API 客户端：sendChat + AbortSignal |
+| `lib/platforms.ts` | 平台类型定义 |
+
+### 数据存储
+
+| 存储 | 用途 | 位置 |
+|------|------|------|
+| SQLite | 用户品牌档案 | `backend/app/shopgenie.db` |
+| localStorage | 会话历史（浏览器端） | 浏览器 |
+
+---
+
+## 5. 扩展配方
+
+### 5.1 加一个平台
+1. 在 `prompts.py` 的 `PLATFORM_PROMPTS` 中新增条目。
+2. 在 `schemas.py` 的 `Platform` 枚举中新增值。
+3. 前端 `platforms.ts`、`WelcomeScreen.tsx`、`ResultCard.tsx` 中新增对应 UI。
+4. `postprocess.py` 中新增该平台的违禁词和规则。
 5. 测试。
 
-### 4.3 加一个版本功能（V2/V3/V4）
+### 5.2 加一个内容类型
+1. 在 `prompts.py` 的 Prompt 中描述新内容类型的格式要求。
+2. 如果需要新的 JSON 字段，在 `schemas.py` 中扩展 `GeneratedContent`。
+3. 前端 `ResultCard.tsx` 中新增预览模板。
+4. `postprocess.py` 中加后处理规则（如有）。
+5. 测试。
+
+### 5.3 加一个版本功能（V2/V3/V4）
 1. 先更新 PRD 和本文件的路线图。
-2. 评估是否需要新的工具/模块。
+2. 评估是否需要新的模块/端点。
 3. 小步迭代，一个功能做完测完再做下一个。
 
 ---
 
-## 5. 编码约定
+## 6. 编码约定
 
 ### 后端（Python）
 - [MUST] Python 3.11+，全量 type hints。
 - [MUST] 异步优先：I/O 一律 async。
 - [SHOULD] 单文件 soft cap ~400 行，函数 ~50 行。
 - [MUST] 不吞异常：要么处理，要么向上抛。
-- [GUIDE] 配置走 YAML + 环境变量，不硬编码。
+- [GUIDE] 配置走 .env 环境变量，不硬编码。
 
 ### 前端（TypeScript）
 - [MUST] 严格 TS，不许 any。
@@ -72,17 +110,17 @@
 
 ---
 
-## 6. 测试与完成标准 [MUST]
+## 7. 测试与完成标准 [MUST]
 
 一个改动算"完成"的标准：
-1. 全部测试通过。
-2. 类型检查/构建无错。
+1. 全部测试通过（`backend/.venv/bin/python -m pytest tests/ -v`）。
+2. 前端构建无错（`cd frontend && npm run build`）。
 3. 改了核心逻辑 → 有覆盖该路径的测试。
 4. 生成内容质量可接受（人工抽检）。
 
 ---
 
-## 7. 版本控制 [MUST]
+## 8. 版本控制 [MUST]
 
 1. 动手前先 git init。
 2. 小步提交，语义清晰。
@@ -91,15 +129,30 @@
 
 ---
 
-## 8. 路线图
+## 9. 路线图
 
 | 版本 | 内容 | 进入条件 |
 |------|------|---------|
-| **V1** | 电商内容生成（抖音脚本 + 小红书笔记 + Amazon Listing + 商品文案） | 项目启动 |
+| **V1** | 电商内容生成（抖音脚本 + 小红书笔记 + Amazon Listing + 商品文案 + 记忆系统 + 违禁词检测） | 项目启动 |
 | **V2** | 店铺运营助手（Listing优化、竞品自动分析、标题SEO、多平台） | V1 验证通过 |
 | **V3** | 数据参谋（店铺数据诊断、趋势洞察、运营建议） | V2 验证通过 |
 | **V4** | 直播 & 客服（直播话术、客服模板、售后处理） | V3 验证通过 |
 
 ---
 
-*最后更新：2026-06-07*
+## 10. 运行方式
+
+```bash
+# 后端
+cd backend && .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+# 前端
+cd frontend && npm run dev
+
+# 测试
+cd backend && .venv/bin/python -m pytest tests/ -v
+```
+
+---
+
+*最后更新：2026-06-08*
