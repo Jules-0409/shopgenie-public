@@ -25,7 +25,6 @@ class DeepSeekClient:
             "model": self.settings.deepseek_model,
             "thinking": {"type": "disabled"},
             "response_format": {"type": "json_object"},
-            "max_tokens": 2400,
             "messages": [
                 {"role": "system", "content": build_system_prompt(request.platform)},
                 *[message.model_dump() for message in request.history],
