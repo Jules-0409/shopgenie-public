@@ -15,6 +15,7 @@ export interface Message {
   text: string;
   card?: GeneratedContent;
   questions?: Question[];
+  warnings?: string[];
   demo?: boolean;
   status?: 'pending' | 'error';
 }
@@ -29,6 +30,16 @@ function renderText(text: string) {
     }
     return part;
   });
+}
+
+function WarningBanner({ warnings }: { warnings: string[] }) {
+  if (!warnings.length) return null;
+  return (
+    <div className="warning-banner">
+      <div className="warning-header">⚠️ 内容检查提醒</div>
+      {warnings.map((w, i) => <div key={i} className="warning-item">{w}</div>)}
+    </div>
+  );
 }
 
 function QuestionChips({ questions, onSubmit }: { questions: Question[]; onSubmit: (text: string) => void }) {
@@ -107,6 +118,7 @@ export default function ChatBubble({ msg, onOptionSelect, onRegenerate }: {
             <span className="typing-dot" /><span className="typing-dot" /><span className="typing-dot" />
           </div>
         )}
+        {msg.warnings && msg.warnings.length > 0 && <WarningBanner warnings={msg.warnings} />}
         {msg.card && <ResultCard card={msg.card} />}
         {msg.questions && msg.questions.length > 0 && onOptionSelect && (
           <QuestionChips questions={msg.questions} onSubmit={onOptionSelect} />

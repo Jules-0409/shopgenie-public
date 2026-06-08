@@ -5,6 +5,7 @@ from typing import Any
 import httpx
 
 from app.config import Settings
+from app.memory import UserProfile, build_memory_prompt
 from app.postprocess import post_process
 from app.prompts import build_system_prompt
 from app.schemas import ChatRequest, ChatResponse, ContentSection, GeneratedContent, Usage
@@ -17,17 +18,22 @@ class DeepSeekError(RuntimeError):
 
 
 class DeepSeekClient:
-    def __init__(self, settings: Settings, client: httpx.AsyncClient | None = None) -> None:
+    def __init__(self, settings: Settings, client: httpx.AsyncClient | None = None, profile: UserProfile | None = None) -> None:
         self.settings = settings
         self._client = client
+        self._profile = profile
 
     async def chat(self, request: ChatRequest) -> ChatResponse:
+        system_prompt = build_system_prompt(request.platform)
+        memory_prompt = build_memory_prompt(self._profile)
+        if memory_prompt:
+            system_prompt = f"{system_prompt}\n\n{memory_prompt}"
         payload = {
             "model": self.settings.deepseek_model,
             "thinking": {"type": "disabled"},
             "response_format": {"type": "json_object"},
             "messages": [
-                {"role": "system", "content": build_system_prompt(request.platform)},
+                {"role": "system", "content": system_prompt},
                 *[message.model_dump() for message in request.history],
                 {"role": "user", "content": request.message},
             ],

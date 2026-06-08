@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import ChatBubble, { type Message, type Question } from '@/components/ChatBubble';
 import { AmazonMark, BrandMark, DyMark, IconHistory, IconShare, XhsMark } from '@/components/Icons';
 import InputBar from '@/components/InputBar';
+import ProfilePanel from '@/components/ProfilePanel';
 import Sidebar, { type ConversationSummary } from '@/components/Sidebar';
 import WelcomeScreen from '@/components/WelcomeScreen';
 import { PLATFORM_LABELS, type Platform } from '@/lib/platforms';
@@ -58,6 +59,7 @@ export default function Home() {
   const [draft, setDraft] = useState('');
   const [hydrated, setHydrated] = useState(false);
   const [view, setView] = useState<'chat' | 'welcome'>('chat');
+  const [profileOpen, setProfileOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const idCounter = useRef(1);
   const abortRef = useRef<AbortController | null>(null);
@@ -174,7 +176,7 @@ export default function Home() {
 
     try {
       const response = await sendChat(requestPlatform, text, history, controller.signal);
-      replacePending(conversationId, pendingMessage.id, { id: `message-${idCounter.current++}`, role: 'ai', text: response.message, card: response.result ?? undefined, questions: response.questions ?? undefined });
+      replacePending(conversationId, pendingMessage.id, { id: `message-${idCounter.current++}`, role: 'ai', text: response.message, card: response.result ?? undefined, questions: response.questions ?? undefined, warnings: response.warnings ?? undefined });
       if (response.conversation_title) {
         setConversations((current) => current.map((item) => (
           item.id === conversationId ? { ...item, title: response.conversation_title! } : item
@@ -233,6 +235,7 @@ export default function Home() {
                 <span className="topbar-title">{activeConversation.title}</span>
                 <button aria-label="查看历史" className="icon-button optional"><IconHistory /></button>
                 <button aria-label="分享对话" className="icon-button optional"><IconShare /></button>
+                <button aria-label="品牌档案" className="icon-button optional" onClick={() => setProfileOpen(true)} title="品牌档案">📋</button>
               </>
             ) : <span className="topbar-title">开始一段新对话</span>}
             <div className="view-toggle">
@@ -263,6 +266,7 @@ export default function Home() {
 
         {view === 'chat' && activeConversation && <InputBar onSend={send} onTextChange={setDraft} pending={pending} text={draft} onStop={stop} />}
       </main>
+      <ProfilePanel open={profileOpen} onClose={() => setProfileOpen(false)} />
     </div>
   );
 }

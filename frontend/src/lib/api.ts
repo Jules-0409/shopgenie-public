@@ -9,6 +9,7 @@ interface ChatApiResponse {
   message: string;
   result: GeneratedContent | null;
   questions: { question: string; options: string[] }[] | null;
+  warnings: string[] | null;
   conversation_title: string | null;
   model: string;
   usage: {
