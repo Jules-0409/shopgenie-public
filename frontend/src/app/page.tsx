@@ -60,6 +60,7 @@ export default function Home() {
   const [view, setView] = useState<'chat' | 'welcome'>('chat');
   const scrollRef = useRef<HTMLDivElement>(null);
   const idCounter = useRef(1);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -159,6 +160,8 @@ export default function Home() {
     setDraft('');
     setView('chat');
     setPending(true);
+    const controller = new AbortController();
+    abortRef.current = controller;
     const userMessage: Message = { id: `message-${idCounter.current++}`, role: 'user', text };
     const pendingMessage: Message = { id: `message-${idCounter.current++}`, role: 'ai', text: '正在为你生成可直接使用的内容…', status: 'pending' };
     appendMessage(conversationId, userMessage);
@@ -170,7 +173,7 @@ export default function Home() {
     )));
 
     try {
-      const response = await sendChat(requestPlatform, text, history);
+      const response = await sendChat(requestPlatform, text, history, controller.signal);
       replacePending(conversationId, pendingMessage.id, { id: `message-${idCounter.current++}`, role: 'ai', text: response.message, card: response.result ?? undefined, questions: response.questions ?? undefined });
       if (response.conversation_title) {
         setConversations((current) => current.map((item) => (
@@ -182,7 +185,34 @@ export default function Home() {
       replacePending(conversationId, pendingMessage.id, { id: `message-${idCounter.current++}`, role: 'ai', text: errorText, status: 'error' });
     } finally {
       setPending(false);
+      abortRef.current = null;
     }
+  };
+
+  const stop = () => {
+    abortRef.current?.abort();
+  };
+
+  const regenerate = () => {
+    if (!activeConversation || pending) return;
+    const msgs = activeConversation.messages;
+    let lastUserText = '';
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].role === 'user' && !msgs[i].demo) {
+        lastUserText = msgs[i].text;
+        break;
+      }
+    }
+    if (!lastUserText) return;
+    setConversations((current) => current.map((conv) => {
+      if (conv.id !== activeConversation.id) return conv;
+      const filtered = [...conv.messages];
+      while (filtered.length > 0 && filtered[filtered.length - 1].role === 'ai' && !filtered[filtered.length - 1].demo) {
+        filtered.pop();
+      }
+      return { ...conv, messages: filtered };
+    }));
+    setTimeout(() => send(lastUserText), 50);
   };
 
   return (
@@ -216,12 +246,22 @@ export default function Home() {
           <div className="chat-scroll dot-grid" ref={scrollRef}>
             <div className="messages">
               {messages.length === 0 && <div className="empty-chat">这是一个新对话。告诉我商品信息、平台和你想要的内容类型。</div>}
-              {messages.map((message) => <ChatBubble key={message.id} msg={message} onOptionSelect={message.questions ? (text) => send(text) : undefined} />)}
+              {messages.map((message, index) => {
+                const isLastAI = message.role === 'ai' && !message.status && !message.demo && (index === messages.length - 1 || messages.slice(index + 1).every((m) => m.role === 'user' || m.demo));
+                return (
+                  <ChatBubble
+                    key={message.id}
+                    msg={message}
+                    onOptionSelect={message.questions ? (text) => send(text) : undefined}
+                    onRegenerate={isLastAI ? regenerate : undefined}
+                  />
+                );
+              })}
             </div>
           </div>
         ) : <WelcomeScreen onSelect={startFromPlatform} />}
 
-        {view === 'chat' && activeConversation && <InputBar onSend={send} onTextChange={setDraft} pending={pending} text={draft} />}
+        {view === 'chat' && activeConversation && <InputBar onSend={send} onTextChange={setDraft} pending={pending} text={draft} onStop={stop} />}
       </main>
     </div>
   );

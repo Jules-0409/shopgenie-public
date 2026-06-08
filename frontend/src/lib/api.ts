@@ -35,14 +35,17 @@ export async function sendChat(
   platform: Platform,
   message: string,
   history: ApiHistoryMessage[],
+  signal?: AbortSignal,
 ): Promise<ChatApiResponse> {
   const response = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ platform, message, history }),
+    signal,
   });
 
   if (!response.ok) {
+    if (response.status === 0) throw new Error('已停止生成');
     const body = await response.json().catch(() => null) as { detail?: string } | null;
     throw new Error(body?.detail ?? '生成失败，请稍后重试');
   }

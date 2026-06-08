@@ -68,6 +68,12 @@ M0 前端基础已完成。V3 设计稿已转为可响应式使用的 Next.js Ch
 - 新增 questions 字段透传：后端 ChatResponse 增加 questions 列表，前端 ChatBubble 渲染为可点击选项按钮（QuestionChips），点击直接发送。
 - [待补充:XXX] 样式优化：气泡和预览卡中的待补充标记渲染为黄色虚线高亮 badge，不再显示为纯文本。
 - 验证：后端 8 测试通过；前端 build 通过。
+- 模型切换：deepseek-v4-flash → deepseek-v4-pro（API 确认仅支持 v4-pro 和 v4-flash）。
+- Prompt 重写：从通用"电商内容运营"升级为"10 年电商运营经验的内容专家"人设。新增内容质量标准（钩子开头、场景化卖点、自然转化、标签策略）、分平台详细指导（小红书真实感、抖音 3 秒留人、Amazon 搜索转化）。
+- 前端新增「停止生成」按钮：InputBar pending 状态下显示红色停止按钮，AbortController 取消进行中的请求。
+- 前端新增「重新生成」按钮：最后一条 AI 消息下方显示，点击删除该消息并重新发送上一条用户消息。
+- 前端 api.ts 支持 AbortSignal 参数传入。
+- 验证：后端 8 测试通过；前端 build 通过。
 
 ### 2026-06-08
 - 完成 V3 UI 设计稿评审，选定 V3 方案

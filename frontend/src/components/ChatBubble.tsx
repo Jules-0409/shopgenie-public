@@ -49,7 +49,11 @@ function QuestionChips({ questions, onSelect }: { questions: Question[]; onSelec
   );
 }
 
-export default function ChatBubble({ msg, onOptionSelect }: { msg: Message; onOptionSelect?: (text: string) => void }) {
+export default function ChatBubble({ msg, onOptionSelect, onRegenerate }: {
+  msg: Message;
+  onOptionSelect?: (text: string) => void;
+  onRegenerate?: () => void;
+}) {
   return (
     <div className={`message-row ${msg.role === 'user' ? 'user' : ''}`}>
       <div className="message-column">
@@ -57,6 +61,12 @@ export default function ChatBubble({ msg, onOptionSelect }: { msg: Message; onOp
         {msg.card && <ResultCard card={msg.card} />}
         {msg.questions && msg.questions.length > 0 && onOptionSelect && (
           <QuestionChips questions={msg.questions} onSelect={onOptionSelect} />
+        )}
+        {msg.role === 'ai' && !msg.status && !msg.demo && onRegenerate && (
+          <button className="regenerate-button" onClick={onRegenerate}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 4v6h6" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" /></svg>
+            重新生成
+          </button>
         )}
       </div>
     </div>
