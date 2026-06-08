@@ -8,6 +8,8 @@ interface ApiHistoryMessage {
 interface ChatApiResponse {
   message: string;
   result: GeneratedContent | null;
+  questions: { question: string; options: string[] }[] | null;
+  conversation_title: string | null;
   model: string;
   usage: {
     prompt_tokens: number;

@@ -1,4 +1,5 @@
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -42,5 +43,7 @@ class GeneratedContent(BaseModel):
 class ChatResponse(BaseModel):
     message: str
     result: GeneratedContent | None = None
+    questions: list[dict[str, Any]] | None = None
+    conversation_title: str | None = None
     model: str
     usage: Usage

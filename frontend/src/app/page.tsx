@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import ChatBubble, { type Message } from '@/components/ChatBubble';
+import ChatBubble, { type Message, type Question } from '@/components/ChatBubble';
 import { AmazonMark, BrandMark, DyMark, IconHistory, IconShare, XhsMark } from '@/components/Icons';
 import InputBar from '@/components/InputBar';
 import Sidebar, { type ConversationSummary } from '@/components/Sidebar';
@@ -171,7 +171,12 @@ export default function Home() {
 
     try {
       const response = await sendChat(requestPlatform, text, history);
-      replacePending(conversationId, pendingMessage.id, { id: `message-${idCounter.current++}`, role: 'ai', text: response.message, card: response.result ?? undefined });
+      replacePending(conversationId, pendingMessage.id, { id: `message-${idCounter.current++}`, role: 'ai', text: response.message, card: response.result ?? undefined, questions: response.questions ?? undefined });
+      if (response.conversation_title) {
+        setConversations((current) => current.map((item) => (
+          item.id === conversationId ? { ...item, title: response.conversation_title! } : item
+        )));
+      }
     } catch (error) {
       const errorText = error instanceof Error ? error.message : '生成失败，请稍后重试';
       replacePending(conversationId, pendingMessage.id, { id: `message-${idCounter.current++}`, role: 'ai', text: errorText, status: 'error' });
@@ -211,7 +216,7 @@ export default function Home() {
           <div className="chat-scroll dot-grid" ref={scrollRef}>
             <div className="messages">
               {messages.length === 0 && <div className="empty-chat">这是一个新对话。告诉我商品信息、平台和你想要的内容类型。</div>}
-              {messages.map((message) => <ChatBubble key={message.id} msg={message} />)}
+              {messages.map((message) => <ChatBubble key={message.id} msg={message} onOptionSelect={message.questions ? (text) => send(text) : undefined} />)}
             </div>
           </div>
         ) : <WelcomeScreen onSelect={startFromPlatform} />}

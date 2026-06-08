@@ -101,6 +101,13 @@ button { color: inherit; }
 .message-row.user .bubble { border-color: var(--ink); border-radius: 15px 15px 4px 15px; background: var(--ink); color: white; box-shadow: 0 8px 24px rgba(25,24,22,.12); }
 .bubble.pending { color: var(--muted); }
 .bubble.error { border-color: #efc4c4; background: #fff5f5; color: #9b3434; }
+.placeholder-badge { display: inline-block; padding: 1px 8px; margin: 0 2px; border-radius: 4px; background: #fff3cd; border: 1px dashed #e6a817; color: #8a6d1b; font-size: 12px; font-weight: 500; vertical-align: baseline; }
+.question-chips { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; padding: 12px 0; }
+.question-group { display: flex; flex-direction: column; gap: 6px; }
+.question-label { font-size: 13px; color: var(--ink); font-weight: 500; }
+.question-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.question-option { padding: 6px 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--ink); font-size: 12.5px; cursor: pointer; transition: all .15s; font-family: 'Noto Sans SC', sans-serif; }
+.question-option:hover { border-color: var(--xhs); background: #fff5f7; color: var(--xhs); }
 .typing-dot { width: 6px; height: 6px; display: inline-block; margin-right: 8px; border-radius: 50%; background: var(--xhs); box-shadow: 10px 0 0 #e3a52f, 20px 0 0 #66876d; animation: pulse 1.1s infinite ease-in-out; }
 @keyframes pulse { 50% { opacity: .35; transform: translateY(-1px); } }
 

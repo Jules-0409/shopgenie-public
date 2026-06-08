@@ -57,12 +57,17 @@ M0 前端基础已完成。V3 设计稿已转为可响应式使用的 Next.js Ch
 ### 2026-06-08（续）
 - ⚠️ Prompt 策略调整：原"少于 3 项产品事实禁止生成"规则过于严格，用户仅输入品类时被反复追问无法预览，体验差。
 - 重写 BASE_PROMPT：三级生成策略（信息充足→直接成品 / 信息有限→草稿+反问 / 信息极少→通用草稿+带选项反问）。
-- 新增 `kind:"draft"` 输出类型：草稿正文含 [待补充] 标记，附带 questions 数组（2-4 选项 + 自定义）。
+- 新增 `kind:"draft"` 输出类型：草稿正文含 [待补充:XXX] 标记，附带 questions 数组（2-4 选项 + 自定义）。
 - 修复 Amazon 对话语言问题：原 Prompt 未区分"对话沟通"与"生成内容"，DeepSeek 对中文用户也用英文追问。
 - Amazon 平台 Prompt 加入明确语言规则：对话沟通中文，Listing 正文英文。
 - deepseek.py `_parse_content` 支持解析 `kind:"draft"`，与 `result` 共用内容结构。
 - 测试更新：`test_prompt_forbids_inventing_product_facts` 适配新 Prompt 措辞；新增 `test_amazon_prompt_mandates_english_listing`。
 - 验证：后端 8 个测试全部通过。
+- 强化 draft 模式：Prompt 加入"信息不足必须返回 kind:draft 绝不能返回 kind:result"的硬规则。
+- 新增 conversation_title：Prompt 要求模型每次返回 8-15 字会话标题，后端解析后前端自动更新侧栏标题（不再截取用户消息前 18 字）。
+- 新增 questions 字段透传：后端 ChatResponse 增加 questions 列表，前端 ChatBubble 渲染为可点击选项按钮（QuestionChips），点击直接发送。
+- [待补充:XXX] 样式优化：气泡和预览卡中的待补充标记渲染为黄色虚线高亮 badge，不再显示为纯文本。
+- 验证：后端 8 测试通过；前端 build 通过。
 
 ### 2026-06-08
 - 完成 V3 UI 设计稿评审，选定 V3 方案

@@ -48,7 +48,9 @@ class DeepSeekClient:
             total_tokens=usage_data.get("total_tokens", 0),
         )
         logger.info("DeepSeek usage model=%s total_tokens=%s", self.settings.deepseek_model, usage.total_tokens)
-        return ChatResponse(message=message, result=result, model=self.settings.deepseek_model, usage=usage)
+        conversation_title = self._parse_title(content)
+        questions = self._parse_questions(content)
+        return ChatResponse(message=message, result=result, questions=questions, conversation_title=conversation_title, model=self.settings.deepseek_model, usage=usage)
 
     def _parse_content(self, content: str, request: ChatRequest) -> tuple[str, GeneratedContent | None]:
         try:
@@ -73,6 +75,26 @@ class DeepSeekClient:
                 raise DeepSeekError("DeepSeek 返回的成品结构不完整") from exc
             return str(parsed.get("message", "已生成可直接使用的内容。")).strip(), result
         raise DeepSeekError("DeepSeek 返回了未知内容类型")
+
+    def _parse_title(self, content: str) -> str | None:
+        try:
+            parsed = json.loads(content)
+            title = parsed.get("conversation_title")
+            if title and isinstance(title, str) and title.strip():
+                return title.strip()[:30]
+        except (json.JSONDecodeError, AttributeError):
+            pass
+        return None
+
+    def _parse_questions(self, content: str) -> list[dict[str, Any]] | None:
+        try:
+            parsed = json.loads(content)
+            questions = parsed.get("questions")
+            if isinstance(questions, list) and len(questions) > 0:
+                return questions[:5]
+        except (json.JSONDecodeError, AttributeError):
+            pass
+        return None
 
     async def _post(self, payload: dict[str, Any]) -> dict[str, Any]:
         headers = {"Authorization": f"Bearer {self.settings.deepseek_api_key}"}
