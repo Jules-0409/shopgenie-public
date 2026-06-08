@@ -25,7 +25,7 @@ class DeepSeekClient:
             "model": self.settings.deepseek_model,
             "thinking": {"type": "disabled"},
             "response_format": {"type": "json_object"},
-            "max_tokens": 1200,
+            "max_tokens": 2400,
             "messages": [
                 {"role": "system", "content": build_system_prompt(request.platform)},
                 *[message.model_dump() for message in request.history],
@@ -53,10 +53,9 @@ class DeepSeekClient:
         return ChatResponse(message=message, result=result, questions=questions, conversation_title=conversation_title, model=self.settings.deepseek_model, usage=usage)
 
     def _parse_content(self, content: str, request: ChatRequest) -> tuple[str, GeneratedContent | None]:
-        try:
-            parsed = json.loads(content)
-        except json.JSONDecodeError as exc:
-            raise DeepSeekError("DeepSeek 返回了无法解析的结构化内容") from exc
+        parsed = self._try_parse_json(content)
+        if parsed is None:
+            raise DeepSeekError("DeepSeek 返回了无法解析的结构化内容")
         if parsed.get("kind") == "message":
             message = str(parsed.get("message", "")).strip()
             if not message:
@@ -72,9 +71,43 @@ class DeepSeekClient:
                     sections=[ContentSection.model_validate(section) for section in parsed.get("sections", [])],
                 )
             except (KeyError, TypeError, ValueError) as exc:
+                logger.error("DeepSeek 返回结构不完整: %s | parsed keys: %s", exc, list(parsed.keys()))
                 raise DeepSeekError("DeepSeek 返回的成品结构不完整") from exc
             return str(parsed.get("message", "已生成可直接使用的内容。")).strip(), result
         raise DeepSeekError("DeepSeek 返回了未知内容类型")
+
+    @staticmethod
+    def _try_parse_json(content: str) -> dict | None:
+        """Try to parse JSON, stripping markdown code blocks and fixing common issues."""
+        text = content.strip()
+        # Strip markdown code block wrapping
+        if text.startswith("```"):
+            first_newline = text.find("\n")
+            if first_newline != -1:
+                text = text[first_newline + 1:]
+            if text.endswith("```"):
+                text = text[:-3].rstrip()
+        # Direct parse
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+        # Try to find JSON object in the text
+        start = text.find("{")
+        if start != -1:
+            # Try progressively shorter substrings (handles truncated JSON)
+            for end in range(len(text), start, -1):
+                if text[end - 1] == "}":
+                    try:
+                        return json.loads(text[start:end])
+                    except json.JSONDecodeError:
+                        continue
+            # Last resort: try the text from first { onwards
+            try:
+                return json.loads(text[start:])
+            except json.JSONDecodeError:
+                pass
+        return None
 
     def _parse_title(self, content: str) -> str | None:
         try:
