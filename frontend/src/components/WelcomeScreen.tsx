@@ -1,32 +1,89 @@
 'use client';
 
+import { AmazonMark, DyMark, XhsMark } from './Icons';
 import type { Platform } from '@/lib/platforms';
 
-const ACTIONS = [
-  { number: '01', title: '写抖音短视频脚本', sub: '15–60 秒，包含 Hook、卖点和转化引导', platform: 'dy' },
-  { number: '02', title: '写小红书种草笔记', sub: '一篇可直接发布的标题、正文与标签', platform: 'xhs' },
-  { number: '03', title: '写商品文案', sub: '把商品卖点整理成有说服力的详情文案', platform: 'xhs' },
-  { number: '04', title: '优化 Amazon Listing', sub: '生成英文标题、五点描述和商品详情', platform: 'amazon' },
-  { number: '05', title: '自由对话', sub: '直接告诉我你现在最想解决的问题', platform: 'xhs' },
-] satisfies Array<{ number: string; title: string; sub: string; platform: Platform }>;
+const PLATFORMS = [
+  {
+    platform: 'xhs',
+    label: '小红书种草笔记',
+    description: '真实分享感，包含标题、正文与话题标签',
+    badge: '生活方式内容',
+  },
+  {
+    platform: 'dy',
+    label: '抖音短视频脚本',
+    description: '可直接拍摄，包含 Hook、分镜口播与转化引导',
+    badge: '15–60 秒脚本',
+  },
+  {
+    platform: 'amazon',
+    label: 'Amazon Listing',
+    description: '英文商品详情，包含标题、Bullet Points 与描述',
+    badge: '跨境电商',
+  },
+] satisfies Array<{ platform: Platform; label: string; description: string; badge: string }>;
 
-export default function WelcomeScreen({ onAction }: { onAction: (title: string, platform: Platform) => void }) {
+const PlatformIcon = ({ platform }: { platform: Platform }) => {
+  if (platform === 'xhs') return <XhsMark s={18} />;
+  if (platform === 'dy') return <DyMark s={18} />;
+  return <AmazonMark s={18} />;
+};
+
+const Preview = ({ platform }: { platform: Platform }) => {
+  if (platform === 'xhs') {
+    return (
+      <div className="platform-mock xhs-mock">
+        <div className="mock-user"><span /> XX美妆 · 刚刚</div>
+        <strong>干皮姐妹别划走！这个补水思路真的有用</strong>
+        <p>真实使用场景 + 产品卖点 + 自然分享表达...</p>
+        <div className="mock-tags">#面膜推荐　#补水护肤</div>
+      </div>
+    );
+  }
+  if (platform === 'dy') {
+    return (
+      <div className="platform-mock dy-mock">
+        <div className="mock-timeline"><b>0–3s</b><span>Hook 抓住注意力</span></div>
+        <div className="mock-timeline"><b>3–12s</b><span>分镜展示核心卖点</span></div>
+        <div className="mock-timeline"><b>12–15s</b><span>自然转化引导</span></div>
+      </div>
+    );
+  }
+  return (
+    <div className="platform-mock amazon-mock">
+      <div className="amazon-search">amazon　Search products</div>
+      <strong>Product Title With Key Features</strong>
+      <div className="amazon-stars">★★★★★ <span>About this item</span></div>
+      <ul><li>KEY BENEFIT — clear product fact</li><li>USE CASE — customer-focused detail</li></ul>
+    </div>
+  );
+};
+
+export default function WelcomeScreen({ onSelect }: { onSelect: (platform: Platform, title: string) => void }) {
   return (
     <div className="welcome dot-grid">
-      <div className="welcome-inner">
-        <div className="welcome-eyebrow">Your commerce creative partner</div>
-        <h1 className="welcome-title">今天想卖点什么？</h1>
-        <p className="welcome-sub">告诉我商品和目标平台，我会给你一份可以直接发布的内容。</p>
-        <div className="memory-chip">● 已记住：XX美妆 · 护肤品 · 真实感 · 不要硬广</div>
-        <div className="action-grid">
-          {ACTIONS.map((action) => (
-            <button className="quick-action" key={action.number} onClick={() => onAction(action.title, action.platform)}>
-              <div className="quick-number">{action.number}</div>
-              <div className="quick-title">{action.title}</div>
-              <div className="quick-sub">{action.sub}</div>
+      <div className="platform-picker">
+        <div className="welcome-eyebrow">Choose a publishing destination</div>
+        <h1 className="welcome-title">准备为哪个平台创作？</h1>
+        <p className="welcome-sub">每个平台使用独立的内容结构和规则。选择后，ShopGenie 会在这次对话中保持平台一致。</p>
+        <div className="platform-preview-grid">
+          {PLATFORMS.map((item) => (
+            <button className={`platform-preview-card ${item.platform}`} key={item.platform} onClick={() => onSelect(item.platform, item.label)}>
+              <div className="platform-preview-head">
+                <span className="preview-icon"><PlatformIcon platform={item.platform} /></span>
+                <span className="preview-badge">{item.badge}</span>
+              </div>
+              <Preview platform={item.platform} />
+              <div className="platform-preview-copy">
+                <strong>{item.label}</strong>
+                <span>{item.description}</span>
+              </div>
+              <div className="preview-cta">使用这个平台 <span>→</span></div>
             </button>
           ))}
         </div>
+        <div className="memory-chip">● 已记住：XX美妆 · 护肤品 · 真实感 · 不要硬广</div>
       </div>
     </div>
   );

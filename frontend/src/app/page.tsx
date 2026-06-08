@@ -121,12 +121,13 @@ export default function Home() {
   };
 
   const newChat = () => {
-    const conversation = createConversation('xhs');
-    setDraft(starterText[conversation.platform]);
+    setActiveId(null);
+    setDraft('');
+    setView('welcome');
   };
 
-  const startFromAction = (title: string, actionPlatform: Platform) => {
-    const conversation = createConversation(actionPlatform, title);
+  const startFromPlatform = (actionPlatform: Platform, title: string) => {
+    const conversation = createConversation(actionPlatform, `${title} · 新对话`);
     setDraft(starterText[actionPlatform]);
     setActiveId(conversation.id);
   };
@@ -203,7 +204,7 @@ export default function Home() {
             ) : <span className="topbar-title">开始一段新对话</span>}
             <div className="view-toggle">
               <button className={view === 'chat' ? 'active' : ''} onClick={() => setView('chat')}>对话</button>
-              <button className={activeConversation?.messages.length === 0 ? 'active' : ''} onClick={newChat}>新对话</button>
+              <button className={view === 'welcome' ? 'active' : ''} onClick={newChat}>新对话</button>
             </div>
           </div>
         </header>
@@ -215,9 +216,9 @@ export default function Home() {
               {messages.map((message) => <ChatBubble key={message.id} msg={message} />)}
             </div>
           </div>
-        ) : <WelcomeScreen onAction={startFromAction} />}
+        ) : <WelcomeScreen onSelect={startFromPlatform} />}
 
-        <InputBar onSend={send} onTextChange={setDraft} pending={pending} text={draft} />
+        {view === 'chat' && activeConversation && <InputBar onSend={send} onTextChange={setDraft} pending={pending} text={draft} />}
       </main>
     </div>
   );
