@@ -153,7 +153,7 @@ button { color: inherit; }
 .welcome-sub { max-width: 590px; margin: 0 auto; color: var(--muted); font-family: 'Noto Sans SC', sans-serif; font-size: 14px; line-height: 1.7; text-align: center; }
 .memory-chip { width: fit-content; margin: 22px auto 0; padding: 8px 13px; border: 1px solid var(--line); border-radius: 99px; background: rgba(255,255,255,.72); color: var(--muted); font-size: 11px; box-shadow: var(--shadow-sm); }
 .platform-preview-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 38px; }
-.platform-preview-card { min-width: 0; padding: 13px; overflow: hidden; border: 1px solid var(--line); border-radius: 20px; background: rgba(255,254,250,.94); text-align: left; cursor: pointer; box-shadow: var(--shadow-sm); transition: .2s ease; }
+.platform-preview-card { width: 100%; min-width: 0; padding: 13px; overflow: hidden; appearance: none; border: 1px solid var(--line); border-radius: 20px; background: rgba(255,254,250,.94); text-align: left; cursor: pointer; box-shadow: var(--shadow-sm); transition: .2s ease; }
 .platform-preview-card:hover { transform: translateY(-4px); border-color: #bdb4aa; box-shadow: var(--shadow-lg); }
 .platform-preview-head { display: flex; align-items: center; justify-content: space-between; padding: 2px 2px 11px; }
 .preview-icon { width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid var(--line-soft); border-radius: 10px; background: white; }
