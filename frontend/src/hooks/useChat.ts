@@ -221,6 +221,7 @@ export function useChat(defaultProductId: string | null) {
 
   const send = useCallback(async (text: string, imageUrl?: string, forcePlatform?: Platform) => {
     if (pending) return;
+    setPending(true);
     const usePlatform = forcePlatform ?? platform;
     const conversation = activeConversation ?? createConversation(usePlatform);
     const history = conversation.messages.filter((m) => !m.demo && !m.status).slice(-10).map((m) => ({
