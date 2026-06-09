@@ -4,7 +4,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import type { Message } from '@/components/ChatBubble';
 import type { Platform } from '@/lib/platforms';
 import { PLATFORM_LABELS } from '@/lib/platforms';
-import { sendChat } from '@/lib/api';
+import { sendChatStream } from '@/lib/api';
 
 interface Conversation {
   id: string;
@@ -103,6 +103,12 @@ export function useChat(defaultProductId: string | null) {
     ));
   }, []);
 
+  const updatePendingText = useCallback((conversationId: string, pendingId: string, text: string) => {
+    setConversations((current) => current.map((c) =>
+      c.id === conversationId ? { ...c, messages: c.messages.map((m) => m.id === pendingId ? { ...m, text } : m) } : c,
+    ));
+  }, []);
+
   const requestResponse = useCallback(async (
     conversationId: string,
     requestPlatform: Platform,
@@ -116,7 +122,7 @@ export function useChat(defaultProductId: string | null) {
     const controller = new AbortController();
     abortRef.current = controller;
     const userMessage: Message = { id: `message-${idCounter.current++}`, role: 'user', text };
-    const pendingMessage: Message = { id: `message-${idCounter.current++}`, role: 'ai', text: '', status: 'pending' };
+    const pendingMessage: Message = { id: `message-${idCounter.current++}`, role: 'ai', text: '正在准备...', status: 'pending' };
     if (appendUser) appendMessage(conversationId, userMessage);
     appendMessage(conversationId, pendingMessage);
     setConversations((current) => current.map((item) =>
@@ -126,18 +132,34 @@ export function useChat(defaultProductId: string | null) {
     ));
 
     try {
-      const response = await sendChat(requestPlatform, text, history, productId ?? undefined, controller.signal);
-      replacePending(conversationId, pendingMessage.id, {
-        id: `message-${idCounter.current++}`, role: 'ai', text: response.message,
-        card: response.result ?? undefined, questions: response.questions ?? undefined,
-        warnings: response.warnings ?? undefined, assetId: response.asset_id ?? undefined,
-        quality: response.quality ?? undefined, taskId: response.task_id ?? undefined,
-        sources: response.sources,
-      });
-      if (response.conversation_title) {
-        setConversations((current) => current.map((item) =>
-          item.id === conversationId ? { ...item, title: response.conversation_title! } : item,
-        ));
+      let finalResult: Record<string, unknown> | null = null;
+      for await (const event of sendChatStream(requestPlatform, text, history, productId ?? undefined, controller.signal)) {
+        if (event.event === 'status') {
+          updatePendingText(conversationId, pendingMessage.id, String(event.data.message ?? ''));
+        } else if (event.event === 'result') {
+          finalResult = event.data;
+        } else if (event.event === 'error') {
+          throw new Error(String(event.data.message ?? '生成失败'));
+        }
+      }
+
+      if (finalResult) {
+        const r = finalResult;
+        replacePending(conversationId, pendingMessage.id, {
+          id: `message-${idCounter.current++}`, role: 'ai', text: String(r.message ?? ''),
+          card: r.result ? (r.result as Record<string, unknown>) as unknown as Message['card'] : undefined,
+          questions: r.questions as Message['questions'],
+          warnings: r.warnings as string[] | undefined,
+          assetId: r.asset_id as string | undefined,
+          quality: r.quality as Message['quality'],
+          taskId: r.task_id as string | undefined,
+          sources: r.sources as Message['sources'],
+        });
+        if (r.conversation_title) {
+          setConversations((current) => current.map((item) =>
+            item.id === conversationId ? { ...item, title: String(r.conversation_title) } : item,
+          ));
+        }
       }
     } catch (error) {
       const errorText = controller.signal.aborted ? '已停止生成' : error instanceof Error ? error.message : '生成失败，请稍后重试';
@@ -146,7 +168,7 @@ export function useChat(defaultProductId: string | null) {
       setPending(false);
       abortRef.current = null;
     }
-  }, [pending, appendMessage, replacePending]);
+  }, [pending, appendMessage, replacePending, updatePendingText]);
 
   const createConversation = useCallback((platformChoice: Platform, title = `${PLATFORM_LABELS[platformChoice]} 新对话`) => {
     const conversation: Conversation = {
@@ -203,6 +225,17 @@ export function useChat(defaultProductId: string | null) {
     }
   }, [activeConversation]);
 
+  const deleteConversation = useCallback((id: string) => {
+    setConversations((current) => {
+      const filtered = current.filter((c) => c.id !== id);
+      if (activeId === id) {
+        const next = filtered.find((c) => c.id !== 'demo-xhs') ?? filtered[0] ?? null;
+        setActiveId(next?.id ?? null);
+      }
+      return filtered;
+    });
+  }, [activeId]);
+
   return {
     conversations, setConversations,
     activeId, setActiveId,
@@ -211,6 +244,6 @@ export function useChat(defaultProductId: string | null) {
     pending, hydrated,
     hydrate, persist,
     send, stop, regenerate,
-    createConversation, setActiveProduct,
+    createConversation, setActiveProduct, deleteConversation,
   };
 }

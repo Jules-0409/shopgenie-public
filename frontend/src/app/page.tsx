@@ -77,7 +77,7 @@ export default function Home() {
 
   return (
     <div className="app-shell">
-      <Sidebar activeId={chat.activeId} conversations={summaries} mobileOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} onNew={newChat} onSelect={openChat} onProfileOpen={() => setProfileOpen(true)} onWorkspaceOpen={() => { setWorkspaceAssetId(null); setWorkspaceOpen(true); }} profile={profile} />
+      <Sidebar activeId={chat.activeId} conversations={summaries} mobileOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} onNew={newChat} onSelect={openChat} onDelete={chat.deleteConversation} onProfileOpen={() => setProfileOpen(true)} onWorkspaceOpen={() => { setWorkspaceAssetId(null); setWorkspaceOpen(true); }} profile={profile} />
       <main className="main-shell">
         <header className="topbar">
           <div className="topbar-inner">

@@ -9,6 +9,8 @@ from app.memory import UserProfile, build_memory_prompt
 from app.postprocess import post_process
 from app.prompts import build_system_prompt
 from app.schemas import ChatRequest, ChatResponse, ContentSection, GeneratedContent, Usage
+from app.workspace import Product
+from app.workspace_context import build_knowledge_prompt, build_performance_prompt, build_product_prompt, retrieve_knowledge
 
 logger = logging.getLogger(__name__)
 
@@ -18,16 +20,32 @@ class DeepSeekError(RuntimeError):
 
 
 class DeepSeekClient:
-    def __init__(self, settings: Settings, client: httpx.AsyncClient | None = None, profile: UserProfile | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        client: httpx.AsyncClient | None = None,
+        profile: UserProfile | None = None,
+        product: Product | None = None,
+    ) -> None:
         self.settings = settings
         self._client = client
         self._profile = profile
+        self._product = product
 
     async def chat(self, request: ChatRequest) -> ChatResponse:
         system_prompt = build_system_prompt(request.platform)
         memory_prompt = build_memory_prompt(self._profile)
         if memory_prompt:
             system_prompt = f"{system_prompt}\n\n{memory_prompt}"
+        product_prompt = build_product_prompt(self._product)
+        if product_prompt:
+            system_prompt = f"{system_prompt}\n\n{product_prompt}"
+        knowledge_prompt = build_knowledge_prompt(request.platform, request.message)
+        if knowledge_prompt:
+            system_prompt = f"{system_prompt}\n\n{knowledge_prompt}"
+        performance_prompt = build_performance_prompt(request.product_id, request.platform)
+        if performance_prompt:
+            system_prompt = f"{system_prompt}\n\n{performance_prompt}"
         payload = {
             "model": self.settings.deepseek_model,
             "thinking": {"type": "disabled"},
@@ -58,10 +76,14 @@ class DeepSeekClient:
         questions = self._parse_questions(content)
         warnings = None
         if result is not None:
-            pp = post_process(result)
+            pp = post_process(result, self._profile.taboo_words if self._profile else None)
             if pp.warnings:
                 warnings = pp.warnings
-        return ChatResponse(message=message, result=result, questions=questions, warnings=warnings, conversation_title=conversation_title, model=self.settings.deepseek_model, usage=usage)
+        sources = [
+            {"id": source.id, "title": source.title, "url": source.url}
+            for source in retrieve_knowledge(request.platform, request.message)
+        ]
+        return ChatResponse(message=message, result=result, questions=questions, warnings=warnings, conversation_title=conversation_title, model=self.settings.deepseek_model, usage=usage, sources=sources)
 
     def _parse_content(self, content: str, request: ChatRequest) -> tuple[str, GeneratedContent | None]:
         parsed = self._try_parse_json(content)
@@ -126,23 +148,19 @@ class DeepSeekClient:
         return None
 
     def _parse_title(self, content: str) -> str | None:
-        try:
-            parsed = json.loads(content)
+        parsed = self._try_parse_json(content)
+        if parsed is not None:
             title = parsed.get("conversation_title")
             if title and isinstance(title, str) and title.strip():
                 return title.strip()[:30]
-        except (json.JSONDecodeError, AttributeError):
-            pass
         return None
 
     def _parse_questions(self, content: str) -> list[dict[str, Any]] | None:
-        try:
-            parsed = json.loads(content)
+        parsed = self._try_parse_json(content)
+        if parsed is not None:
             questions = parsed.get("questions")
             if isinstance(questions, list) and len(questions) > 0:
                 return questions[:5]
-        except (json.JSONDecodeError, AttributeError):
-            pass
         return None
 
     async def _post(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -154,6 +172,55 @@ class DeepSeekClient:
             timeout=self.settings.deepseek_timeout_seconds,
         ) as client:
             return await self._request(client, payload, headers)
+
+    async def chat_stream(self, request: ChatRequest):
+        """Stream tokens from DeepSeek API. Yields string tokens."""
+        system_prompt = build_system_prompt(request.platform)
+        memory_prompt = build_memory_prompt(self._profile)
+        if memory_prompt:
+            system_prompt = f"{system_prompt}\n\n{memory_prompt}"
+        product_prompt = build_product_prompt(self._product)
+        if product_prompt:
+            system_prompt = f"{system_prompt}\n\n{product_prompt}"
+        knowledge_prompt = build_knowledge_prompt(request.platform, request.message)
+        if knowledge_prompt:
+            system_prompt = f"{system_prompt}\n\n{knowledge_prompt}"
+        performance_prompt = build_performance_prompt(request.product_id, request.platform)
+        if performance_prompt:
+            system_prompt = f"{system_prompt}\n\n{performance_prompt}"
+
+        payload = {
+            "model": self.settings.deepseek_model,
+            "thinking": {"type": "disabled"},
+            "response_format": {"type": "json_object"},
+            "stream": True,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                *[message.model_dump() for message in request.history],
+                {"role": "user", "content": request.message},
+            ],
+        }
+        headers = {"Authorization": f"Bearer {self.settings.deepseek_api_key}"}
+        async with httpx.AsyncClient(
+            base_url=self.settings.deepseek_base_url,
+            timeout=self.settings.deepseek_timeout_seconds,
+        ) as client:
+            async with client.stream("POST", "/chat/completions", json=payload, headers=headers) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    data = line[6:]
+                    if data.strip() == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data)
+                        delta = chunk.get("choices", [{}])[0].get("delta", {})
+                        token = delta.get("content", "")
+                        if token:
+                            yield token
+                    except (json.JSONDecodeError, IndexError, KeyError):
+                        continue
 
     async def _request(
         self,
