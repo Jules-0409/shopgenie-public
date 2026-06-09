@@ -10,6 +10,7 @@ from app.config import Settings, get_settings
 from app.deepseek import DeepSeekClient, DeepSeekError
 from app.memory import get_profile
 from app.postprocess import post_process
+from app.platform_validator import validate_platform_content
 from app.schemas import ChatRequest, Platform
 from app.workspace import get_product
 from app.workspace_context import learn_product_from_message
@@ -76,6 +77,12 @@ async def chat_stream_generator(
             pp = post_process(result)
             if pp.warnings:
                 warnings = pp.warnings
+            # Platform structure validation
+            validation = validate_platform_content(result)
+            if not validation.valid:
+                platform_warnings = [f"🚫 平台结构校验：{err}" for err in validation.errors]
+                warnings = (warnings or []) + platform_warnings
+                logger.warning("Platform validation failed for %s: %s", request.platform.value, validation.errors)
 
         # Step 7: Save to workspace
         from app.workspace import create_agent_task, complete_agent_task, create_content_asset

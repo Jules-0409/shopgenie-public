@@ -7,6 +7,7 @@ import httpx
 from app.config import Settings
 from app.memory import UserProfile, build_memory_prompt
 from app.postprocess import post_process
+from app.platform_validator import validate_platform_content
 from app.prompts import build_system_prompt
 from app.schemas import ChatRequest, ChatResponse, ContentSection, GeneratedContent, Usage
 from app.workspace import Product
@@ -79,6 +80,12 @@ class DeepSeekClient:
             pp = post_process(result, self._profile.taboo_words if self._profile else None)
             if pp.warnings:
                 warnings = pp.warnings
+            # Platform structure validation
+            validation = validate_platform_content(result)
+            if not validation.valid:
+                platform_warnings = [f"🚫 平台结构校验：{err}" for err in validation.errors]
+                warnings = (warnings or []) + platform_warnings
+                logger.warning("Platform validation failed for %s: %s", request.platform.value, validation.errors)
         sources = [
             {"id": source.id, "title": source.title, "url": source.url}
             for source in retrieve_knowledge(request.platform, request.message)
