@@ -56,6 +56,21 @@ V1.5 已具备三平台生成、商品事实库、内容版本、质量闭环、
 
 ## 执行日志
 
+### 2026-06-10
+- 交互逻辑修复：选平台不再立即创建会话，发第一条消息后会话才出现在侧栏。
+  - 新增 `pendingPlatform` 状态，`startFromPlatform` 不调 `createConversation`
+  - `send()` 增加 `forcePlatform` 参数，首次发送时创建会话
+  - 修复重复创建会话 bug：`send()` 提前设 `pending=true`
+- AI 生图入口重做：从浮动橙色按钮改为 WorkspacePanel 风格右侧滑出面板。
+- 砍掉「设计助手」入口，替换为「📸 商品图工作室」——独立全屏工具页。
+  - 新增 `StudioView` 组件：左栏上传+自动抠图预览，右栏场景模板+生成结果
+  - 后端新增 `studio.py`：`/api/studio/remove-bg` (rembg 抠图) + `/api/studio/generate` (通义万相换背景)
+  - 移除 `Platform.DESIGN`，新增 `Platform.STUDIO`
+  - 移除 `ImageGenPanel` 组件及关联 CSS
+- SOUL.md 加硬规则：方括号标签只出现在 TTS 命令中，聊天文字禁止。
+- 文档同步：TEST_PLAN.md 交互测试用例。
+- 验证：后端 62 测试通过；前端 23 测试通过；build 通过。
+
 ### 2026-06-09（续2）
 - 平台强契约：新增 platform_validator.py，三平台确定性结构校验器。
   - 小红书：必须中文标题+正文+至少1个标签，拒绝英文内容污染。

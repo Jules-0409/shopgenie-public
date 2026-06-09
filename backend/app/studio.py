@@ -1,12 +1,9 @@
-"""商品图工作室：抠图 + 保主体换背景。"""
+"""商品图工作室：AI 换背景。通义万相自动识别主体。"""
 
-import base64
-import io
 import logging
 import time
 
 import httpx
-from PIL import Image
 
 from app.config import Settings
 
@@ -15,29 +12,14 @@ logger = logging.getLogger(__name__)
 DASHSCOPE_EDIT_BASE = "https://dashscope.aliyuncs.com/api/v1/services/aigc/image2image/image-synthesis"
 
 
-async def remove_background(image_bytes: bytes) -> bytes:
-    """Remove background from an image using rembg. Returns PNG bytes."""
-    try:
-        from rembg import remove
-    except ImportError:
-        raise RuntimeError("rembg 未安装，请运行 pip install rembg")
-
-    input_image = Image.open(io.BytesIO(image_bytes))
-    output_image = remove(input_image)
-    buf = io.BytesIO()
-    output_image.save(buf, format="PNG")
-    return buf.getvalue()
-
-
 async def edit_image(
-    reference_image_b64: str,
+    image_b64: str,
     prompt: str,
     settings: Settings,
     size: str = "1024*1024",
 ) -> dict:
-    """Use Wanx image editing to generate a new scene while preserving the subject.
-
-    Sends the reference image (background-removed product) + a scene prompt.
+    """Send original product photo + scene prompt to Wanx.
+    The AI identifies the subject and changes the background automatically.
     """
     async with httpx.AsyncClient(timeout=30) as client:
         response = await client.post(
@@ -48,10 +30,10 @@ async def edit_image(
                 "X-DashScope-Async": "enable",
             },
             json={
-                "model": "wanx2.1-t2i-turbo",
+                "model": "wan2.1-t2i-turbo",
                 "input": {
-                    "prompt": prompt,
-                    "ref_img": reference_image_b64,
+                    "prompt": f"{prompt}. Keep the product exactly as shown in the reference image, only change the background and scene.",
+                    "ref_img": image_b64,
                 },
                 "parameters": {"size": size, "n": 1},
             },

@@ -54,6 +54,9 @@
 | `workspace_context.py` | 将商品事实、相关知识与历史效果组装为生成上下文 |
 | `knowledge_fetch.py` | 安全抓取指定公开网页，拒绝内网、非文本和超大响应 |
 | `web_search.py` | 有界发现最新规则、趋势与竞品公开网页来源 |
+| `studio.py` | 商品图工作室：rembg 抠图 + 通义万相图像编辑换背景 |
+| `vision.py` | 多模态：Qwen-VL 图片理解 + 通义万相文生图 |
+| `design_image_prompts.py` | 生图场景模板库：18 个电商图 prompt，5 大类 |
 
 ### 前端 (`frontend/src/`)
 
@@ -68,6 +71,7 @@
 | `components/Sidebar.tsx` | 侧栏：会话列表 |
 | `components/WelcomeScreen.tsx` | 平台选择页 |
 | `components/WorkspacePanel.tsx` | 内容工作台：商品库、版本编辑、知识、任务、效果数据 |
+| `components/StudioView.tsx` | 商品图工作室：上传→抠图→选模板→换背景，全屏工具页 |
 | `lib/api.ts` | API 客户端：sendChat + AbortSignal |
 | `lib/platforms.ts` | 平台类型定义 |
 
