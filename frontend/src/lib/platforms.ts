@@ -1,11 +1,11 @@
-export type Platform = 'xhs' | 'dy' | 'amazon' | 'cs' | 'design';
+export type Platform = 'xhs' | 'dy' | 'amazon' | 'cs' | 'studio';
 
 export const PLATFORM_LABELS: Record<Platform, string> = {
   xhs: '小红书',
   dy: '抖音',
   amazon: 'Amazon',
   cs: '客服话术',
-  design: '设计助手',
+  studio: '商品图工作室',
 };
 
 export const PLATFORM_TITLES: Record<Platform, string> = {
@@ -13,8 +13,8 @@ export const PLATFORM_TITLES: Record<Platform, string> = {
   dy: '玻尿酸补水面膜 · 短视频脚本',
   amazon: '玻尿酸补水面膜 · 商品 Listing',
   cs: '客服话术模板',
-  design: '设计助手',
+  studio: '商品图工作室',
 };
 
 export const CONTENT_PLATFORMS: Platform[] = ['xhs', 'dy', 'amazon'];
-export const SCENARIO_PLATFORMS: Platform[] = ['cs', 'design'];
+export const SCENARIO_PLATFORMS: Platform[] = ['cs', 'studio'];

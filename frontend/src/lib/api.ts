@@ -310,7 +310,7 @@ export interface DesignTemplates {
   platform_sizes: Record<string, string>;
 }
 
-export const getDesignTemplates = () => requestJson<DesignTemplates>('/shopgenie/api/design/templates');
+export const getDesignTemplates = () => requestJson<DesignTemplates>('/shopgenie/api/studio/templates');
 
 export const generateImage = (prompt: string, size: string = '1024*1024') =>
   requestJson<{ task_id: string; status: string }>('/shopgenie/api/vision/generate', {

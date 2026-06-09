@@ -34,10 +34,10 @@ const SCENARIOS = [
     icon: '💬',
   },
   {
-    platform: 'design' as Platform,
-    label: '设计助手',
-    description: '商品拍摄指导、主图文案、详情页结构',
-    icon: '🎨',
+    platform: 'studio' as Platform,
+    label: '商品图工作室',
+    description: '上传商品图 → 智能抠图 → 换场景背景',
+    icon: '📸',
   },
 ];
 

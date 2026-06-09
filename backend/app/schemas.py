@@ -9,7 +9,7 @@ class Platform(StrEnum):
     DOUYIN = "dy"
     AMAZON = "amazon"
     CS = "cs"
-    DESIGN = "design"
+    STUDIO = "studio"
 
 
 class ChatMessage(BaseModel):

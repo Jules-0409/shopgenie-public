@@ -472,12 +472,12 @@ async def api_poll_image(task_id: str, settings: Settings = Depends(get_settings
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
-# --- Design Templates ---
+# --- Studio (商品图工作室) ---
 
 
-@app.get("/api/design/templates")
-async def api_design_templates() -> dict:
-    """返回生图 prompt 模板列表，供前端 ImageGenPanel 使用。"""
+@app.get("/api/studio/templates")
+async def api_studio_templates() -> dict:
+    """返回场景模板列表，供前端 StudioView 使用。"""
     from app.design_image_prompts import ALL_TEMPLATES, TEMPLATES_BY_CATEGORY, PLATFORM_SIZES
 
     templates = [
@@ -495,3 +495,72 @@ async def api_design_templates() -> dict:
         for key, val in TEMPLATES_BY_CATEGORY.items()
     }
     return {"templates": templates, "categories": categories, "platform_sizes": PLATFORM_SIZES}
+
+
+class RemoveBgResponse(BaseModel):
+    image_b64: str  # base64-encoded PNG
+
+
+@app.post("/api/studio/remove-bg", response_model=RemoveBgResponse)
+async def api_remove_bg(req: ImageAnalyzeInput, settings: Settings = Depends(get_settings)) -> RemoveBgResponse:
+    """抠图：上传商品图片，返回去除背景后的 PNG (base64)。"""
+    import base64 as b64
+
+    if not req.image_url:
+        raise HTTPException(status_code=400, detail="请上传商品图片")
+    try:
+        from app.studio import remove_background
+
+        # Handle both base64 data URLs and regular URLs
+        if req.image_url.startswith("data:"):
+            header, encoded = req.image_url.split(",", 1)
+            image_bytes = b64.b64decode(encoded)
+        else:
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.get(req.image_url)
+                resp.raise_for_status()
+                image_bytes = resp.content
+
+        result_bytes = await remove_background(image_bytes)
+        result_b64 = b64.b64encode(result_bytes).decode("utf-8")
+        return RemoveBgResponse(image_b64=f"data:image/png;base64,{result_b64}")
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"抠图失败: {exc}")
+
+
+class StudioGenerateInput(BaseModel):
+    reference_image_b64: str = Field(min_length=1, max_length=5000000)  # base64 PNG of extracted subject
+    prompt: str = Field(min_length=1, max_length=500)
+    size: str = Field(default="1024*1024", max_length=20)
+
+
+@app.post("/api/studio/generate")
+async def api_studio_generate(req: StudioGenerateInput, settings: Settings = Depends(get_settings)) -> dict:
+    """保主体换背景：传入抠好的商品图 + 场景描述，生成新图。"""
+    if not settings.dashscope_api_key:
+        raise HTTPException(status_code=503, detail="未配置 DashScope API Key")
+    try:
+        from app.studio import edit_image
+
+        result = await edit_image(req.reference_image_b64, req.prompt, settings, req.size)
+        task_id = result.get("output", {}).get("task_id", "")
+        return {"task_id": task_id, "status": "submitted"}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"图片生成失败: {exc}")
+
+
+@app.get("/api/studio/generate/{task_id}")
+async def api_studio_poll(task_id: str, settings: Settings = Depends(get_settings)) -> dict:
+    """轮询图片编辑任务状态。"""
+    if not settings.dashscope_api_key:
+        raise HTTPException(status_code=503, detail="未配置 DashScope API Key")
+    try:
+        from app.studio import poll_edit_task
+
+        return await poll_edit_task(task_id, settings)
+    except TimeoutError:
+        raise HTTPException(status_code=408, detail="图片生成超时")
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
