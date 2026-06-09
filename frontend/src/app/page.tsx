@@ -31,6 +31,7 @@ export default function Home() {
   const [defaultProductId, setDefaultProductId] = useState<string | null>(null);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [workspaceAssetId, setWorkspaceAssetId] = useState<string | null>(null);
+  const [imageGenOpen, setImageGenOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const chat = useChat(defaultProductId);
@@ -97,6 +98,12 @@ export default function Home() {
                 </span>
                 <span className="topbar-title">{chat.activeConversation.title}</span>
                 {chat.activeProductId && <span className="active-product-chip">{products.find((item) => item.id === chat.activeProductId)?.name ?? '商品事实'}</span>}
+                {chat.platform === 'design' && (
+                  <button className="topbar-tool-btn" onClick={() => setImageGenOpen(true)} title="AI 生图">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+                    AI 生图
+                  </button>
+                )}
               </>
             ) : <span className="topbar-title">开始一段新对话</span>}
           </div>
@@ -124,17 +131,13 @@ export default function Home() {
         ) : <WelcomeScreen onSelect={startFromPlatform} profile={profile} onProfileOpen={() => setProfileOpen(true)} />}
 
         {view === 'chat' && chat.activeConversation && <InputBar onSend={(text, imageUrl) => { chat.send(text, imageUrl); setDraft(''); }} onTextChange={setDraft} pending={chat.pending} text={draft} onStop={chat.stop} />}
-        {view === 'chat' && chat.platform === 'design' && (
-          <div className="image-gen-panel-wrapper">
-            <ImageGenPanel product={draft || undefined} />
-          </div>
-        )}
       </main>
       <ProfilePanel open={profileOpen} onClose={() => setProfileOpen(false)} onSaved={setProfile} />
       <WorkspacePanel open={workspaceOpen} onClose={() => { setWorkspaceOpen(false); listProducts().then(setProducts).catch(() => undefined); }} activeProductId={chat.activeProductId} onActiveProductChange={(productId) => {
         setDefaultProductId(productId);
         chat.setActiveProduct(productId);
       }} targetAssetId={workspaceAssetId} />
+      <ImageGenPanel open={imageGenOpen} onClose={() => setImageGenOpen(false)} product={draft || undefined} />
     </div>
   );
 }

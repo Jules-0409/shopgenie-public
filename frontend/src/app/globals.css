@@ -100,6 +100,8 @@ button { color: inherit; }
 .icon-button:hover { border-color: #c5bdb4; background: white; color: var(--ink); }
 .workspace-trigger { font-size: 9px; font-weight: 800; letter-spacing: -.04em; }
 .active-product-chip { max-width: 160px; overflow: hidden; padding: 5px 8px; border: 1px solid #cde1d3; border-radius: 7px; background: #f2faf5; color: var(--green); font-size: 10px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.topbar-tool-btn { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--muted); font-size: 10px; font-weight: 600; cursor: pointer; transition: .15s; white-space: nowrap; }
+.topbar-tool-btn:hover { border-color: #bbb1a5; color: var(--ink); }
 .view-toggle { display: flex; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 9px; background: #ebe7e1; }
 .view-toggle button { padding: 5px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--faint); font-size: 11px; cursor: pointer; }
 .view-toggle button.active { background: white; color: var(--ink); font-weight: 700; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
@@ -467,266 +469,174 @@ button { color: inherit; }
   .composer-footer > span:first-child { display: none; }
 }
 
-/* ─── ImageGen Panel ─── */
+/* ─── ImageGen Panel (matching WorkspacePanel style) ─── */
 
-.image-gen-panel-wrapper {
-  position: fixed;
-  right: 24px;
-  bottom: 120px;
-  z-index: 30;
+.image-gen-overlay {
+  position: fixed; inset: 0; z-index: 110;
+  display: flex; justify-content: flex-end;
+  background: rgba(25,24,22,.34);
+  backdrop-filter: blur(3px);
 }
 
 .image-gen-panel {
-  position: relative;
+  width: min(480px, 94vw);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 1px solid var(--line);
+  background: var(--canvas);
+  box-shadow: -20px 0 70px rgba(30,25,20,.16);
 }
 
-.image-gen-toggle {
-  display: flex;
-  align-items: center;
+.image-gen-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 22px;
+}
+
+.image-gen-template-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
-  background: linear-gradient(135deg, #f59e0b, #d97706);
-  color: white;
-  border: none;
-  padding: 10px 18px;
-  border-radius: 24px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  box-shadow: 0 2px 12px rgba(245, 158, 11, 0.35);
-  transition: transform 0.15s, box-shadow 0.15s;
+  margin-top: 8px;
 }
 
-.image-gen-toggle:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.5);
-}
-
-.image-gen-toggle.active {
-  background: white;
-  color: #d97706;
-  border: 1.5px solid #f59e0b;
-}
-
-.image-gen-dropdown {
-  position: absolute;
-  bottom: calc(100% + 12px);
-  right: 0;
-  width: 340px;
-  max-height: 70vh;
-  background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-  padding: 16px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.image-gen-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.image-gen-header strong {
-  font-size: 15px;
-  color: #111827;
-}
-
-.image-gen-powered {
-  font-size: 11px;
-  color: #9ca3af;
-  background: #f3f4f6;
-  padding: 2px 8px;
-  border-radius: 10px;
-}
-
-.image-gen-categories {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.image-gen-cat {
-  padding: 5px 10px;
-  border-radius: 14px;
-  border: 1px solid #e5e7eb;
-  background: white;
-  font-size: 12px;
-  color: #6b7280;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.15s;
-}
-
-.image-gen-cat.active {
-  background: #fef3c7;
-  border-color: #f59e0b;
-  color: #92400e;
-}
-
-.image-gen-templates {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-height: 180px;
-  overflow-y: auto;
-}
-
-.image-gen-tpl {
+.image-gen-tpl-card {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  padding: 8px 10px;
-  border-radius: 10px;
-  border: 1px solid #f3f4f6;
-  background: #fafafa;
-  cursor: pointer;
+  gap: 3px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
   text-align: left;
-  transition: all 0.15s;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
 }
 
-.image-gen-tpl:hover {
-  border-color: #fcd34d;
-  background: #fffbeb;
+.image-gen-tpl-card:hover {
+  border-color: #bbb1a5;
+  background: white;
 }
 
-.image-gen-tpl.selected {
-  border-color: #f59e0b;
-  background: #fef3c7;
+.image-gen-tpl-card.selected {
+  border-color: var(--ink);
+  box-shadow: inset 3px 0 var(--ink);
 }
 
-.image-gen-tpl strong {
+.image-gen-tpl-card strong {
   font-size: 13px;
-  color: #1f2937;
+  font-weight: 600;
+  color: var(--ink);
 }
 
-.image-gen-tpl span {
-  font-size: 12px;
-  color: #6b7280;
-  margin-top: 2px;
+.image-gen-tpl-card span {
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.45;
 }
 
-.image-gen-tpl small {
-  font-size: 11px;
-  color: #9ca3af;
-  margin-top: 4px;
+.image-gen-tpl-card small {
+  font-size: 10px;
+  color: var(--faint);
 }
 
-.image-gen-prompt {
+.image-gen-prompt-input {
   width: 100%;
-  padding: 10px;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
   font-size: 13px;
-  resize: vertical;
   font-family: inherit;
+  line-height: 1.6;
+  resize: vertical;
+  background: var(--surface);
+  color: var(--ink);
   box-sizing: border-box;
 }
 
-.image-gen-prompt:focus {
+.image-gen-prompt-input:focus {
   outline: none;
-  border-color: #f59e0b;
-  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.1);
+  border-color: var(--ink);
 }
 
-.image-gen-actions {
+.image-gen-action-row {
   display: flex;
-  gap: 8px;
+  gap: 10px;
+  margin-top: 14px;
 }
 
-.image-gen-size {
-  padding: 8px 12px;
-  border: 1px solid #e5e7eb;
+.image-gen-size-select {
+  padding: 9px 14px;
+  border: 1px solid var(--line);
   border-radius: 10px;
   font-size: 13px;
-  background: white;
+  background: var(--surface);
+  color: var(--ink);
   cursor: pointer;
 }
 
-.image-gen-btn {
+.image-gen-generate-btn {
   flex: 1;
-  padding: 9px 16px;
-  background: linear-gradient(135deg, #f59e0b, #d97706);
+  padding: 10px 18px;
+  background: var(--ink);
   color: white;
   border: none;
   border-radius: 10px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: opacity 0.15s;
+  transition: opacity .15s;
 }
 
-.image-gen-btn:disabled {
-  opacity: 0.5;
+.image-gen-generate-btn:disabled {
+  opacity: .35;
   cursor: not-allowed;
 }
 
-.image-gen-btn:hover:not(:disabled) {
-  opacity: 0.9;
+.image-gen-generate-btn:hover:not(:disabled) {
+  opacity: .85;
 }
 
-.image-gen-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: #92400e;
-  padding: 8px 12px;
-  background: #fef3c7;
-  border-radius: 8px;
-}
-
-.image-gen-spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid #fcd34d;
-  border-top-color: #d97706;
-  border-radius: 50%;
-  animation: spin 0.6s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.image-gen-error {
-  font-size: 13px;
-  color: #dc2626;
-  padding: 8px 12px;
-  background: #fef2f2;
-  border-radius: 8px;
-}
-
-.image-gen-preview {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.image-gen-preview img {
-  width: 100%;
+.image-gen-status-msg {
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: #f7f4ef;
   border-radius: 10px;
-  border: 1px solid #e5e7eb;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.image-gen-preview-area {
+  margin-top: 16px;
+}
+
+.image-gen-preview-area img {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--line);
 }
 
 .image-gen-preview-actions {
   display: flex;
   gap: 8px;
+  margin-top: 8px;
 }
 
 .image-gen-preview-actions button {
   flex: 1;
-  padding: 6px 12px;
-  border: 1px solid #e5e7eb;
+  padding: 7px 0;
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: white;
+  background: var(--surface);
   font-size: 12px;
+  color: var(--muted);
   cursor: pointer;
 }
 
 .image-gen-preview-actions button:hover {
-  background: #f9fafb;
+  background: #f7f4ef;
 }

@@ -5,12 +5,13 @@ import type { ImageTemplate, DesignTemplates } from '@/lib/api';
 import { getDesignTemplates, generateImage, pollImageTask } from '@/lib/api';
 
 interface ImageGenPanelProps {
+  open: boolean;
+  onClose: () => void;
   product?: string;
   onImageGenerated?: (imageUrl: string) => void;
 }
 
-export default function ImageGenPanel({ product, onImageGenerated }: ImageGenPanelProps) {
-  const [open, setOpen] = useState(false);
+export default function ImageGenPanel({ open, onClose, product, onImageGenerated }: ImageGenPanelProps) {
   const [templates, setTemplates] = useState<DesignTemplates | null>(null);
   const [category, setCategory] = useState<string>('studio');
   const [selectedTemplate, setSelectedTemplate] = useState<ImageTemplate | null>(null);
@@ -29,6 +30,12 @@ export default function ImageGenPanel({ product, onImageGenerated }: ImageGenPan
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [open, templates]);
 
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    if (open) window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [open, onClose]);
+
   const selectTemplate = useCallback((t: ImageTemplate) => {
     setSelectedTemplate(t);
     setCustomPrompt('');
@@ -38,14 +45,12 @@ export default function ImageGenPanel({ product, onImageGenerated }: ImageGenPan
   const handleGenerate = useCallback(async () => {
     const prompt = customPrompt.trim() || (selectedTemplate ? `Template: ${selectedTemplate.id}` : '');
     if (!prompt && !product) return;
-    const finalPrompt = product
-      ? `商品：${product}。${prompt}`
-      : prompt;
+    const finalPrompt = product ? `商品：${product}。${prompt}` : prompt;
 
     setGenerating(true); setError(null); setGeneratedUrl(null); setStatus('正在提交...');
     try {
       const { task_id } = await generateImage(finalPrompt, size);
-      setStatus('正在生成图片...');
+      setStatus('正在生成图片，约需 10-30 秒...');
       pollRef.current = setInterval(async () => {
         try {
           const result = await pollImageTask(task_id);
@@ -54,7 +59,7 @@ export default function ImageGenPanel({ product, onImageGenerated }: ImageGenPan
             const url = result.output.results?.[0]?.url;
             if (url) {
               setGeneratedUrl(url);
-              setStatus('生成完成！');
+              setStatus('');
               onImageGenerated?.(url);
             } else {
               setError('生成成功但未获取到图片 URL');
@@ -62,12 +67,10 @@ export default function ImageGenPanel({ product, onImageGenerated }: ImageGenPan
             setGenerating(false);
           } else if (result.output.task_status === 'FAILED') {
             clearInterval(pollRef.current!);
-            setError('图片生成失败');
+            setError('图片生成失败，请重试');
             setGenerating(false);
           }
-        } catch {
-          // keep polling
-        }
+        } catch { /* keep polling */ }
       }, 2000);
     } catch (e) {
       setError((e as Error).message || '生成失败');
@@ -80,47 +83,39 @@ export default function ImageGenPanel({ product, onImageGenerated }: ImageGenPan
     categories[category]?.template_ids.includes(t.id)
   ) ?? [];
 
+  if (!open) return null;
+
   return (
-    <div className="image-gen-panel">
-      <button
-        className={`image-gen-toggle${open ? ' active' : ''}`}
-        onClick={() => setOpen(!open)}
-        title="AI 生图"
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <rect x="3" y="3" width="18" height="18" rx="2" />
-          <circle cx="8.5" cy="8.5" r="1.5" />
-          <path d="m21 15-5-5L5 21" />
-        </svg>
-        <span>AI 生图</span>
-      </button>
-
-      {open && (
-        <div className="image-gen-dropdown">
-          <div className="image-gen-header">
-            <strong>AI 商品图生成</strong>
-            <span className="image-gen-powered">通义万相</span>
+    <div className="image-gen-overlay" onClick={onClose}>
+      <div className="image-gen-panel" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="workspace-header">
+          <div>
+            <span>设计工具</span>
+            <h2>AI 生图</h2>
+            <p>通义万相 · 选模板或自定义 prompt 生成商品图</p>
           </div>
+          <button onClick={onClose} aria-label="关闭">✕</button>
+        </div>
 
-          {/* Category tabs */}
-          <div className="image-gen-categories">
-            {Object.entries(categories).map(([key, val]) => (
-              <button
-                key={key}
-                className={`image-gen-cat${category === key ? ' active' : ''}`}
-                onClick={() => { setCategory(key); setSelectedTemplate(null); }}
-              >
-                {val.name}
-              </button>
-            ))}
-          </div>
+        {/* Category tabs */}
+        <div className="workspace-tabs">
+          {Object.entries(categories).map(([key, val]) => (
+            <button key={key} className={category === key ? 'active' : ''} onClick={() => { setCategory(key); setSelectedTemplate(null); }}>
+              {val.name}
+            </button>
+          ))}
+        </div>
 
+        {/* Body */}
+        <div className="image-gen-body">
           {/* Templates */}
-          <div className="image-gen-templates">
+          <div className="workspace-section-title">模板</div>
+          <div className="image-gen-template-grid">
             {filteredTemplates.map((t) => (
               <button
                 key={t.id}
-                className={`image-gen-tpl${selectedTemplate?.id === t.id ? ' selected' : ''}`}
+                className={`image-gen-tpl-card${selectedTemplate?.id === t.id ? ' selected' : ''}`}
                 onClick={() => selectTemplate(t)}
               >
                 <strong>{t.name}</strong>
@@ -131,49 +126,45 @@ export default function ImageGenPanel({ product, onImageGenerated }: ImageGenPan
           </div>
 
           {/* Custom prompt */}
+          <div className="workspace-section-title" style={{ marginTop: 16 }}>Prompt</div>
           <textarea
-            className="image-gen-prompt"
-            placeholder={selectedTemplate
-              ? `基于「${selectedTemplate.name}」模板自定义修改...`
-              : product
-                ? `描述你想要的 ${product} 图片风格...`
-                : '选择模板或输入自定义描述...'}
+            className="image-gen-prompt-input"
+            placeholder={
+              selectedTemplate
+                ? `基于「${selectedTemplate.name}」模板自定义修改…`
+                : product
+                  ? `描述你想要的 ${product} 图片风格、场景、光线…`
+                  : '描述你想要的图片风格、场景、光线…'
+            }
             value={customPrompt}
             onChange={(e) => setCustomPrompt(e.target.value)}
-            rows={3}
+            rows={4}
             maxLength={500}
           />
 
-          {/* Size + Generate */}
-          <div className="image-gen-actions">
-            <select value={size} onChange={(e) => setSize(e.target.value)} className="image-gen-size">
+          {/* Actions */}
+          <div className="image-gen-action-row">
+            <select value={size} onChange={(e) => setSize(e.target.value)} className="image-gen-size-select">
               <option value="1024*1024">1:1 方形</option>
               <option value="768*1024">3:4 竖图</option>
               <option value="720*1280">9:16 全屏</option>
             </select>
             <button
-              className="image-gen-btn"
+              className="image-gen-generate-btn"
               onClick={handleGenerate}
               disabled={generating || (!customPrompt.trim() && !selectedTemplate && !product)}
             >
-              {generating ? '生成中...' : '生成图片'}
+              {generating ? '生成中…' : '生成图片'}
             </button>
           </div>
 
           {/* Status */}
-          {status && !error && (
-            <div className="image-gen-status">
-              {generating && <span className="image-gen-spinner" />}
-              {status}
-            </div>
-          )}
-
-          {/* Error */}
-          {error && <div className="image-gen-error">{error}</div>}
+          {status && !error && <div className="image-gen-status-msg">{status}</div>}
+          {error && <div className="workspace-error">{error}</div>}
 
           {/* Preview */}
           {generatedUrl && (
-            <div className="image-gen-preview">
+            <div className="image-gen-preview-area">
               <img src={generatedUrl} alt="生成的商品图" />
               <div className="image-gen-preview-actions">
                 <button onClick={() => window.open(generatedUrl, '_blank')}>查看大图</button>
@@ -182,7 +173,7 @@ export default function ImageGenPanel({ product, onImageGenerated }: ImageGenPan
             </div>
           )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
