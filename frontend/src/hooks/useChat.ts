@@ -70,7 +70,13 @@ export function useChat(defaultProductId: string | null) {
         if (Array.isArray(saved) && saved.length > 0) {
           setConversations([...saved, DEMO_CONVERSATION]);
           setActiveId(saved[0].id);
-          idCounter.current = saved.reduce((t, c) => t + c.messages.length, saved.length) + 100;
+          idCounter.current = saved.reduce((max, c) => {
+            const maxId = c.messages.reduce((m, msg) => {
+              const num = parseInt(msg.id.replace('message-', ''), 10);
+              return isNaN(num) ? m : Math.max(m, num);
+            }, 0);
+            return Math.max(max, maxId);
+          }, 0) + 1;
         }
       } catch {
         window.localStorage.removeItem(STORAGE_KEY);
