@@ -1,6 +1,7 @@
 'use client';
 
 import { AmazonMark, DyMark, XhsMark } from './Icons';
+import type { UserProfile } from '@/lib/api';
 import type { Platform } from '@/lib/platforms';
 
 const PLATFORMS = [
@@ -30,11 +31,11 @@ const PlatformIcon = ({ platform }: { platform: Platform }) => {
   return <AmazonMark s={18} />;
 };
 
-const Preview = ({ platform }: { platform: Platform }) => {
+const Preview = ({ platform, brandName }: { platform: Platform; brandName: string }) => {
   if (platform === 'xhs') {
     return (
       <div className="platform-mock xhs-mock">
-        <div className="mock-user"><span /> XX美妆 · 刚刚</div>
+        <div className="mock-user"><span /> {brandName} · 刚刚</div>
         <strong>干皮姐妹别划走！这个补水思路真的有用</strong>
         <p>真实使用场景 + 产品卖点 + 自然分享表达...</p>
         <div className="mock-tags">#面膜推荐　#补水护肤</div>
@@ -60,7 +61,12 @@ const Preview = ({ platform }: { platform: Platform }) => {
   );
 };
 
-export default function WelcomeScreen({ onSelect }: { onSelect: (platform: Platform, title: string) => void }) {
+export default function WelcomeScreen({ onSelect, profile }: { onSelect: (platform: Platform, title: string) => void; profile: UserProfile | null }) {
+  const brandName = profile?.brand_name || '你的品牌';
+  const memoryItems = profile
+    ? [profile.brand_name, profile.category, profile.tone, ...profile.style_preferences].filter(Boolean).slice(0, 4)
+    : [];
+
   return (
     <div className="welcome dot-grid">
       <div className="platform-picker">
@@ -74,7 +80,7 @@ export default function WelcomeScreen({ onSelect }: { onSelect: (platform: Platf
                 <span className="preview-icon"><PlatformIcon platform={item.platform} /></span>
                 <span className="preview-badge">{item.badge}</span>
               </div>
-              <Preview platform={item.platform} />
+              <Preview platform={item.platform} brandName={brandName} />
               <div className="platform-preview-copy">
                 <strong>{item.label}</strong>
                 <span>{item.description}</span>
@@ -83,7 +89,7 @@ export default function WelcomeScreen({ onSelect }: { onSelect: (platform: Platf
             </button>
           ))}
         </div>
-        <div className="memory-chip">● 已记住：XX美妆 · 护肤品 · 真实感 · 不要硬广</div>
+        <div className="memory-chip">{memoryItems.length > 0 ? `● 已记住：${memoryItems.join(' · ')}` : '○ 设置品牌档案后，生成内容会更贴合你的风格'}</div>
       </div>
     </div>
   );

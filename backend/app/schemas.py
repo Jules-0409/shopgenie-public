@@ -19,6 +19,7 @@ class ChatRequest(BaseModel):
     platform: Platform
     message: str = Field(min_length=1, max_length=500)
     history: list[ChatMessage] = Field(default_factory=list, max_length=12)
+    product_id: str | None = Field(default=None, max_length=80)
 
 
 class Usage(BaseModel):
@@ -48,3 +49,7 @@ class ChatResponse(BaseModel):
     conversation_title: str | None = None
     model: str
     usage: Usage
+    asset_id: str | None = None
+    quality: dict[str, Any] | None = None
+    task_id: str | None = None
+    sources: list[dict[str, str]] = Field(default_factory=list, max_length=5)

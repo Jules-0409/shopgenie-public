@@ -36,3 +36,10 @@ def test_amazon_banned_words():
     content = make_content(Platform.AMAZON, title="Best product guaranteed", body="Miracle cure for all")
     result = check_banned_words(content)
     assert len(result.banned_words_found) >= 2
+
+
+def test_custom_brand_banned_words():
+    content = make_content(Platform.XHS, body="这款产品主打速效焕肤")
+    result = post_process(content, ["速效"])
+    assert "速效" in result.banned_words_found
+    assert any("品牌禁忌词" in warning for warning in result.warnings)

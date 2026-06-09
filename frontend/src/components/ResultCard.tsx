@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { AmazonMark, DyMark, IconCamera, IconComment, IconCopy, IconEdit, IconHeart, IconRefresh, IconStar, XhsMark } from './Icons';
-import type { GeneratedContent } from '@/lib/api';
+import { AmazonMark, DyMark, IconCamera, IconComment, IconCopy, IconHeart, IconRefresh, IconStar, XhsMark } from './Icons';
+import type { GeneratedContent, QualityReport } from '@/lib/api';
 import { PLATFORM_LABELS, type Platform } from '@/lib/platforms';
 
 function renderPlaceholder(text: string) {
@@ -23,24 +23,24 @@ const PlatformIcon = ({ platform }: { platform: Platform }) => {
   return <AmazonMark />;
 };
 
-const XhsPreview = ({ card }: { card: GeneratedContent }) => (
+const XhsPreview = ({ card, brandName }: { card: GeneratedContent; brandName: string }) => (
   <div className="xhs-phone">
     <div className="phone-status"><span>9:41</span><b>● ● ●</b></div>
     <div className="xhs-nav"><span>‹</span><strong>笔记预览</strong><span>•••</span></div>
-    <div className="app-profile"><span>美</span><div><strong>XX美妆旗舰店</strong><small>上海 · 刚刚</small></div><b>关注</b></div>
+    <div className="app-profile"><span>{brandName.trim().slice(0, 1) || '品'}</span><div><strong>{brandName}</strong><small>刚刚发布</small></div><b>关注</b></div>
     <div className="xhs-preview-cover"><IconCamera /><span>首图待添加 · 建议 3:4 竖图</span></div>
     <div className="app-content"><h2>{renderPlaceholder(card.title)}</h2><div className="app-body">{renderPlaceholder(card.body)}</div><div className="post-tags">{card.tags.map((tag) => <span className="post-tag" key={tag}>#{tag}</span>)}</div></div>
     <div className="xhs-actions"><span>说点什么...</span><IconHeart /><IconStar /><IconComment /></div>
   </div>
 );
 
-const DouyinPreview = ({ card }: { card: GeneratedContent }) => (
+const DouyinPreview = ({ card, brandName }: { card: GeneratedContent; brandName: string }) => (
   <div className="douyin-preview-shell">
     <div className="douyin-phone">
       <div className="dy-top"><span>推荐</span><b>关注</b><span>搜索</span></div>
       <div className="dy-camera"><IconCamera /><span>按分镜拍摄后在这里预览成片</span></div>
-      <div className="dy-caption"><strong>@XX美妆旗舰店</strong><p>{card.title}</p><span>{card.tags.map((tag) => `#${tag}`).join(' ')}</span></div>
-      <div className="dy-side-actions"><b>美</b><span>♡<small>点赞</small></span><span>○<small>评论</small></span><span>↗<small>分享</small></span></div>
+      <div className="dy-caption"><strong>@{brandName}</strong><p>{card.title}</p><span>{card.tags.map((tag) => `#${tag}`).join(' ')}</span></div>
+      <div className="dy-side-actions"><b>{brandName.trim().slice(0, 1) || '品'}</b><span>♡<small>点赞</small></span><span>○<small>评论</small></span><span>↗<small>分享</small></span></div>
     </div>
     <div className="dy-script-panel">
       <div className="script-panel-title"><span>拍摄脚本</span><b>{card.sections.length || 1} 个分镜</b></div>
@@ -66,7 +66,9 @@ const AmazonPreview = ({ card }: { card: GeneratedContent }) => (
   </div>
 );
 
-export default function ResultCard({ card }: { card: GeneratedContent }) {
+export default function ResultCard({ card, brandName = '你的品牌', onRegenerate, quality, onEdit }: {
+  card: GeneratedContent; brandName?: string; onRegenerate?: () => void; quality?: QualityReport; onEdit?: () => void;
+}) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     await navigator.clipboard.writeText(`${card.title}\n\n${card.body}\n\n${card.tags.map((tag) => `#${tag}`).join(' ')}`);
@@ -79,17 +81,17 @@ export default function ResultCard({ card }: { card: GeneratedContent }) {
       <header className="result-toolbar">
         <div className="result-type"><PlatformIcon platform={card.platform} /> {PLATFORM_LABELS[card.platform]}应用预览</div>
         <div className="result-actions">
-          <button className="action-button"><IconRefresh /> 再来一版</button>
-          <button className="action-button"><IconEdit /> 编辑</button>
+          {onRegenerate && <button className="action-button" onClick={onRegenerate}><IconRefresh /> 再来一版</button>}
+          {onEdit && <button className="action-button" onClick={onEdit}>编辑与版本</button>}
           <button className="action-button primary" onClick={copy}><IconCopy /> {copied ? '已复制' : '复制全文'}</button>
         </div>
       </header>
       <div className={`result-stage stage-${card.platform}`}>
-        {card.platform === 'xhs' && <XhsPreview card={card} />}
-        {card.platform === 'dy' && <DouyinPreview card={card} />}
+        {card.platform === 'xhs' && <XhsPreview card={card} brandName={brandName} />}
+        {card.platform === 'dy' && <DouyinPreview card={card} brandName={brandName} />}
         {card.platform === 'amazon' && <AmazonPreview card={card} />}
       </div>
-      <footer className="result-footer"><span className="check">✓ 信息结构通过</span><span className="check">✓ 平台格式已适配</span><span className="tip">生成内容请在发布前核对产品事实</span></footer>
+      <footer className="result-footer"><span className="check">✓ 信息结构通过</span><span className="check">✓ 平台格式已适配</span>{quality && <span className={`quality-pill ${quality.score >= 80 ? 'good' : 'review'}`}>质量 {quality.score}</span>}<span className="tip">生成内容请在发布前核对产品事实</span></footer>
     </article>
   );
 }

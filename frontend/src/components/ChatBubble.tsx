@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import ResultCard from './ResultCard';
-import type { GeneratedContent } from '@/lib/api';
+import type { GeneratedContent, QualityReport } from '@/lib/api';
 
 export interface Question {
   question: string;
@@ -18,6 +18,10 @@ export interface Message {
   warnings?: string[];
   demo?: boolean;
   status?: 'pending' | 'error';
+  assetId?: string;
+  quality?: QualityReport;
+  taskId?: string;
+  sources?: { id: string; title: string; url: string }[];
 }
 
 function renderText(text: string) {
@@ -76,7 +80,7 @@ function QuestionChips({ questions, onSubmit }: { questions: Question[]; onSubmi
         <div key={index} className="question-group">
           <div className="question-label">{q.question}</div>
           <div className="question-options">
-            {q.options.map((option, optionIndex) => {
+            {q.options.filter((option) => !option.includes('自定义')).map((option, optionIndex) => {
               const selected = (selections[index] ?? []).includes(option);
               return (
                 <button
@@ -104,10 +108,12 @@ function QuestionChips({ questions, onSubmit }: { questions: Question[]; onSubmi
   );
 }
 
-export default function ChatBubble({ msg, onOptionSelect, onRegenerate }: {
+export default function ChatBubble({ msg, onOptionSelect, onRegenerate, brandName, onEditAsset }: {
   msg: Message;
   onOptionSelect?: (text: string) => void;
   onRegenerate?: () => void;
+  brandName?: string;
+  onEditAsset?: (assetId: string) => void;
 }) {
   return (
     <div className={`message-row ${msg.role === 'user' ? 'user' : ''}`}>
@@ -119,11 +125,12 @@ export default function ChatBubble({ msg, onOptionSelect, onRegenerate }: {
           </div>
         )}
         {msg.warnings && msg.warnings.length > 0 && <WarningBanner warnings={msg.warnings} />}
-        {msg.card && <ResultCard card={msg.card} />}
+        {msg.card && <ResultCard card={msg.card} brandName={brandName} onRegenerate={onRegenerate} quality={msg.quality} onEdit={msg.assetId && onEditAsset ? () => onEditAsset(msg.assetId!) : undefined} />}
         {msg.questions && msg.questions.length > 0 && onOptionSelect && (
           <QuestionChips questions={msg.questions} onSubmit={onOptionSelect} />
         )}
-        {msg.role === 'ai' && !msg.status && !msg.demo && onRegenerate && (
+        {msg.sources && msg.sources.length > 0 && <div className="source-list"><strong>参考来源</strong>{msg.sources.map((source) => source.url ? <a href={source.url} key={source.id} rel="noreferrer" target="_blank">{source.title}</a> : <span key={source.id}>{source.title}</span>)}</div>}
+        {msg.role === 'ai' && !msg.card && !msg.status && !msg.demo && onRegenerate && (
           <button className="regenerate-button" onClick={onRegenerate}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 4v6h6" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" /></svg>
             重新生成

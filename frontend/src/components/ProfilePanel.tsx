@@ -1,58 +1,68 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { EMPTY_PROFILE, getProfile, saveProfile, type UserProfile } from '@/lib/api';
+import { PLATFORM_LABELS, type Platform } from '@/lib/platforms';
 
-interface UserProfile {
-  brand_name: string;
-  category: string;
-  target_audience: string;
-  tone: string;
-  style_preferences: string[];
-  platforms: string[];
-  taboo_words: string[];
-  extra_notes: string;
+interface ProfilePanelProps {
+  open: boolean;
+  onClose: () => void;
+  onSaved: (profile: UserProfile) => void;
 }
 
-const EMPTY_PROFILE: UserProfile = {
-  brand_name: '',
-  category: '',
-  target_audience: '',
-  tone: '',
-  style_preferences: [],
-  platforms: [],
-  taboo_words: [],
-  extra_notes: '',
-};
+const PLATFORM_OPTIONS = Object.entries(PLATFORM_LABELS) as [Platform, string][];
+const splitItems = (value: string) => value.split(/[、,，]/).map((item) => item.trim()).filter(Boolean);
 
-export default function ProfilePanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+export default function ProfilePanel({ open, onClose, onSaved }: ProfilePanelProps) {
   const [profile, setProfile] = useState<UserProfile>(EMPTY_PROFILE);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
+  const [styleText, setStyleText] = useState('');
+  const [tabooText, setTabooText] = useState('');
 
   useEffect(() => {
     if (!open) return;
-    fetch('/api/profile')
-      .then((r) => r.json())
+    getProfile()
       .then((data) => {
-        if (data.profile) setProfile(data.profile);
-        else setProfile(EMPTY_PROFILE);
+        const loaded = data ?? EMPTY_PROFILE;
+        setProfile(loaded);
+        setStyleText(loaded.style_preferences.join('、'));
+        setTabooText(loaded.taboo_words.join('、'));
+        setError('');
       })
-      .catch(() => setProfile(EMPTY_PROFILE));
+      .catch((loadError: unknown) => setError(loadError instanceof Error ? loadError.message : '品牌档案加载失败'));
   }, [open]);
 
   const save = async () => {
     setSaving(true);
+    setError('');
     try {
-      await fetch('/api/profile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(profile),
+      const savedProfile = await saveProfile({
+        ...profile,
+        style_preferences: splitItems(styleText),
+        taboo_words: splitItems(tabooText),
       });
+      setProfile(savedProfile);
+      setStyleText(savedProfile.style_preferences.join('、'));
+      setTabooText(savedProfile.taboo_words.join('、'));
+      onSaved(savedProfile);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : '品牌档案保存失败');
     } finally {
       setSaving(false);
     }
+  };
+
+  const togglePlatform = (platform: Platform) => {
+    setProfile((current) => ({
+      ...current,
+      platforms: current.platforms.includes(platform)
+        ? current.platforms.filter((item) => item !== platform)
+        : [...current.platforms, platform],
+    }));
   };
 
   if (!open) return null;
@@ -83,17 +93,28 @@ export default function ProfilePanel({ open, onClose }: { open: boolean; onClose
           </label>
           <label>
             <span>风格偏好</span>
-            <input value={profile.style_preferences.join('、')} onChange={(e) => setProfile({ ...profile, style_preferences: e.target.value.split('、').filter(Boolean) })} placeholder="不要硬广、像朋友聊天（用顿号分隔）" />
+            <input value={styleText} onChange={(e) => setStyleText(e.target.value)} placeholder="不要硬广、像朋友聊天（用顿号或逗号分隔）" />
           </label>
+          <fieldset className="profile-platforms">
+            <legend>常用平台</legend>
+            <div>
+              {PLATFORM_OPTIONS.map(([value, label]) => (
+                <button type="button" className={profile.platforms.includes(value) ? 'selected' : ''} key={value} onClick={() => togglePlatform(value)}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </fieldset>
           <label>
-            <span>禁忌词</span>
-            <input value={profile.taboo_words.join('、')} onChange={(e) => setProfile({ ...profile, taboo_words: e.target.value.split('、').filter(Boolean) })} placeholder="绝对不能出现的词（用顿号分隔）" />
+            <span>禁忌词 <small>生成后会自动检测</small></span>
+            <input value={tabooText} onChange={(e) => setTabooText(e.target.value)} placeholder="绝对不能出现的词（用顿号或逗号分隔）" />
           </label>
           <label>
             <span>备注</span>
             <textarea value={profile.extra_notes} onChange={(e) => setProfile({ ...profile, extra_notes: e.target.value })} placeholder="其他想让 ShopGenie 知道的信息…" rows={3} />
           </label>
         </div>
+        {error && <div className="profile-error">{error}</div>}
         <div className="profile-footer">
           <button className="profile-cancel" onClick={onClose}>关闭</button>
           <button className="profile-save" onClick={save} disabled={saving}>

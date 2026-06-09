@@ -92,3 +92,16 @@ async def test_chat_returns_question_without_result() -> None:
         result = await DeepSeekClient(settings(), client).chat(ChatRequest(platform=Platform.XHS, message="写笔记"))
     assert result.message == "请补充产品材质"
     assert result.result is None
+
+
+@pytest.mark.asyncio
+async def test_chat_keeps_title_and_questions_from_markdown_wrapped_json() -> None:
+    content = """```json
+{"kind":"draft","conversation_title":"补水面膜种草","message":"先看草稿","title":"面膜草稿","body":"正文","questions":[{"question":"什么肤质？","options":["干皮","自定义填写"]}]}
+```"""
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json={"choices": [{"message": {"content": content}}]}))
+    async with httpx.AsyncClient(transport=transport, base_url="https://api.deepseek.com") as client:
+        result = await DeepSeekClient(settings(), client).chat(ChatRequest(platform=Platform.XHS, message="写笔记"))
+
+    assert result.conversation_title == "补水面膜种草"
+    assert result.questions == [{"question": "什么肤质？", "options": ["干皮", "自定义填写"]}]

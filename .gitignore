@@ -9,4 +9,5 @@ coverage/
 __pycache__/
 *.pyc
 *.log
+*.db
 .frontend-git-backup/

@@ -35,7 +35,7 @@ PLATFORM_BANNED: dict[Platform, list[str]] = {
 }
 
 
-def check_banned_words(content: GeneratedContent) -> PostProcessResult:
+def check_banned_words(content: GeneratedContent, custom_banned: list[str] | None = None) -> PostProcessResult:
     """检测成品内容中的违禁词"""
     result = PostProcessResult()
     full_text = f"{content.title} {content.body} {' '.join(t for t in content.tags)}"
@@ -52,6 +52,12 @@ def check_banned_words(content: GeneratedContent) -> PostProcessResult:
         if word.lower() in full_text.lower():
             result.banned_words_found.append(word)
             result.warnings.append(f"⚠️ {content.platform.value} 平台违禁词：「{word}」")
+
+    for word in custom_banned or []:
+        clean_word = word.strip()
+        if clean_word and clean_word.lower() in full_text.lower():
+            result.banned_words_found.append(clean_word)
+            result.warnings.append(f"⚠️ 品牌禁忌词：「{clean_word}」")
 
     return result
 
@@ -91,9 +97,9 @@ def check_platform_rules(content: GeneratedContent) -> PostProcessResult:
     return result
 
 
-def post_process(content: GeneratedContent) -> PostProcessResult:
+def post_process(content: GeneratedContent, custom_banned: list[str] | None = None) -> PostProcessResult:
     """完整后处理流程"""
-    result = check_banned_words(content)
+    result = check_banned_words(content, custom_banned)
     platform_result = check_platform_rules(content)
     result.warnings.extend(platform_result.warnings)
     return result
