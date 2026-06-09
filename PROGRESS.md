@@ -61,6 +61,12 @@ V1.5 已具备三平台生成、商品事实库、内容版本、质量闭环、
 - AGENTS.md 模块结构已同步。
 - 验证：后端 47 测试通过；前端 build 通过。
 - ⚠️ 已知问题：localStorage 恢复会话时 idCounter 初始化可能与已有消息 ID 冲突，导致 React key 重复警告。
+- 修复 React key 冲突：idCounter 从 localStorage 恢复时读取实际最大 message ID，不再用计数+100。
+- 新增删除对话功能：侧栏 hover 显示 × 按钮，点击两次确认删除；删除活跃会话自动切换到下一条。
+- 新增 SSE 流式输出：后端 /api/chat/stream 端点，DeepSeekClient.chat_stream() 实时转发 token。
+- 新增 Agent 状态指示：pending 气泡实时显示状态文字（正在加载上下文→正在发现知识→正在生成内容→正在解析→正在质检）。
+- 前端 sendChatStream() 异步生成器，useChat 改用流式消费。
+- 验证：后端 47 测试通过；前端 build 通过。
 
 ### 2026-06-09
 - ⚠️ 人工测试发现跨平台格式污染：Amazon 会话可被外部 Prompt 带成中文笔记，抖音脚本也可能退化为小红书式正文。
