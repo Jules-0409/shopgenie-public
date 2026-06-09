@@ -29,7 +29,7 @@ describe('InputBar', () => {
     const onSend = vi.fn();
     render(<InputBar pending={false} text="test message" onSend={onSend} onTextChange={() => undefined} />);
     fireEvent.click(screen.getByLabelText('发送消息'));
-    expect(onSend).toHaveBeenCalledWith('test message');
+    expect(onSend).toHaveBeenCalledWith('test message', undefined);
   });
 
   it('calls onStop when stop button clicked', () => {

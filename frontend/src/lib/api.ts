@@ -293,3 +293,37 @@ export const saveStoredSession = (session: Omit<StoredSession, 'created_at' | 'u
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(session),
 });
 export const deleteStoredSession = (id: string) => requestJson<{ deleted: boolean }>(`/shopgenie/api/sessions/${id}`, { method: 'DELETE' });
+
+// --- Vision / Image Generation ---
+
+export interface ImageTemplate {
+  id: string;
+  name: string;
+  description: string;
+  aspect_ratio: string;
+  tags: string[];
+}
+
+export interface DesignTemplates {
+  templates: ImageTemplate[];
+  categories: Record<string, { name: string; template_ids: string[] }>;
+  platform_sizes: Record<string, string>;
+}
+
+export const getDesignTemplates = () => requestJson<DesignTemplates>('/shopgenie/api/design/templates');
+
+export const generateImage = (prompt: string, size: string = '1024*1024') =>
+  requestJson<{ task_id: string; status: string }>('/shopgenie/api/vision/generate', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, size }),
+  });
+
+export interface ImageTaskResult {
+  output: {
+    task_id: string;
+    task_status: string;
+    results?: Array<{ url: string }>;
+  };
+}
+
+export const pollImageTask = (taskId: string) =>
+  requestJson<ImageTaskResult>(`/shopgenie/api/vision/generate/${taskId}`);

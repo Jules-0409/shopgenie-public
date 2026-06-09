@@ -1,12 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { AmazonMark, DyMark, IconCamera, IconComment, IconCopy, IconHeart, IconRefresh, IconStar, XhsMark } from './Icons';
 import type { GeneratedContent, QualityReport } from '@/lib/api';
 import { PLATFORM_LABELS, type Platform } from '@/lib/platforms';
 
 function renderPlaceholder(text: string) {
-  const parts = text.split(/(\[待补充[^\]]*\])/g);
+  const parts = text.split(/(\\[待补充[^\\]]*\\])/g);
   if (parts.length === 1) return text;
   return parts.map((part, index) => {
     if (part.startsWith('[待补充')) {
@@ -23,22 +23,82 @@ const PlatformIcon = ({ platform }: { platform: Platform }) => {
   return <AmazonMark />;
 };
 
-const XhsPreview = ({ card, brandName }: { card: GeneratedContent; brandName: string }) => (
+/* Drag-and-drop image zone */
+
+function useDropImage() {
+  const [image, setImage] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+
+  const onDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(true);
+  }, []);
+
+  const onDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+  }, []);
+
+  const onDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = () => setImage(reader.result as string);
+    reader.readAsDataURL(file);
+  }, []);
+
+  return { image, setImage, dragOver, onDragOver, onDragLeave, onDrop };
+}
+
+/* Preview components */
+
+const XhsPreview = ({ card, brandName, image, dragOver, onDragOver, onDragLeave, onDrop }: {
+  card: GeneratedContent; brandName: string;
+  image: string | null; dragOver: boolean;
+  onDragOver: (e: React.DragEvent) => void; onDragLeave: (e: React.DragEvent) => void; onDrop: (e: React.DragEvent) => void;
+}) => (
   <div className="xhs-phone">
     <div className="phone-status"><span>9:41</span><b>● ● ●</b></div>
     <div className="xhs-nav"><span>‹</span><strong>笔记预览</strong><span>•••</span></div>
     <div className="app-profile"><span>{brandName.trim().slice(0, 1) || '品'}</span><div><strong>{brandName}</strong><small>刚刚发布</small></div><b>关注</b></div>
-    <div className="xhs-preview-cover"><IconCamera /><span>首图待添加 · 建议 3:4 竖图</span></div>
+    <div
+      className={`xhs-preview-cover${dragOver ? ' drag-over' : ''}${image ? ' has-image' : ''}`}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
+      {image
+        ? <img src={image} alt="预览图" />
+        : <><IconCamera /><span>拖入图片替换首图 · 建议 3:4 竖图</span></>}
+    </div>
     <div className="app-content"><h2>{renderPlaceholder(card.title)}</h2><div className="app-body">{renderPlaceholder(card.body)}</div><div className="post-tags">{card.tags.map((tag) => <span className="post-tag" key={tag}>#{tag}</span>)}</div></div>
     <div className="xhs-actions"><span>说点什么...</span><IconHeart /><IconStar /><IconComment /></div>
   </div>
 );
 
-const DouyinPreview = ({ card, brandName }: { card: GeneratedContent; brandName: string }) => (
+const DouyinPreview = ({ card, brandName, image, dragOver, onDragOver, onDragLeave, onDrop }: {
+  card: GeneratedContent; brandName: string;
+  image: string | null; dragOver: boolean;
+  onDragOver: (e: React.DragEvent) => void; onDragLeave: (e: React.DragEvent) => void; onDrop: (e: React.DragEvent) => void;
+}) => (
   <div className="douyin-preview-shell">
     <div className="douyin-phone">
       <div className="dy-top"><span>推荐</span><b>关注</b><span>搜索</span></div>
-      <div className="dy-camera"><IconCamera /><span>按分镜拍摄后在这里预览成片</span></div>
+      <div
+        className={`dy-camera${dragOver ? ' drag-over' : ''}${image ? ' has-image' : ''}`}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+      >
+        {image
+          ? <img src={image} alt="预览视频封面" />
+          : <><IconCamera /><span>按分镜拍摄后在这里预览成片 · 拖入图片替换</span></>}
+      </div>
       <div className="dy-caption"><strong>@{brandName}</strong><p>{card.title}</p><span>{card.tags.map((tag) => `#${tag}`).join(' ')}</span></div>
       <div className="dy-side-actions"><b>{brandName.trim().slice(0, 1) || '品'}</b><span>♡<small>点赞</small></span><span>○<small>评论</small></span><span>↗<small>分享</small></span></div>
     </div>
@@ -51,12 +111,28 @@ const DouyinPreview = ({ card, brandName }: { card: GeneratedContent; brandName:
   </div>
 );
 
-const AmazonPreview = ({ card }: { card: GeneratedContent }) => (
+const AmazonPreview = ({ card, image, dragOver, onDragOver, onDragLeave, onDrop }: {
+  card: GeneratedContent;
+  image: string | null; dragOver: boolean;
+  onDragOver: (e: React.DragEvent) => void; onDragLeave: (e: React.DragEvent) => void; onDrop: (e: React.DragEvent) => void;
+}) => (
   <div className="amazon-app-preview">
     <div className="amazon-app-header"><AmazonMark s={16} /> amazon <span>Search products</span></div>
     <div className="amazon-breadcrumb">Beauty & Personal Care › Product detail preview</div>
     <div className="amazon-product">
-      <div className="amazon-gallery"><div className="amazon-thumbnails"><i /><i /><i /></div><div className="amazon-image"><IconCamera /><span>MAIN PRODUCT IMAGE</span></div></div>
+      <div className="amazon-gallery">
+        <div className="amazon-thumbnails"><i /><i /><i /></div>
+        <div
+          className={`amazon-image${dragOver ? ' drag-over' : ''}${image ? ' has-image' : ''}`}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+        >
+          {image
+            ? <img src={image} alt="商品主图" />
+            : <><IconCamera /><span>MAIN PRODUCT IMAGE · 拖入图片替换</span></>}
+        </div>
+      </div>
       <div className="amazon-detail"><h2>{renderPlaceholder(card.title)}</h2><div className="amazon-rating">★★★★★</div><strong>About this item</strong>
         <ul>{(card.sections.length ? card.sections : [{ label: 'Product description', content: card.body }]).map((section) => <li key={section.label}><b>{section.label}:</b> {renderPlaceholder(section.content)}</li>)}</ul>
         <div className="amazon-description"><strong>Product description</strong><p>{renderPlaceholder(card.body)}</p></div>
@@ -70,6 +146,7 @@ export default function ResultCard({ card, brandName = '你的品牌', onRegener
   card: GeneratedContent; brandName?: string; onRegenerate?: () => void; quality?: QualityReport; onEdit?: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const { image, dragOver, onDragOver, onDragLeave, onDrop } = useDropImage();
   const copy = async () => {
     await navigator.clipboard.writeText(`${card.title}\n\n${card.body}\n\n${card.tags.map((tag) => `#${tag}`).join(' ')}`);
     setCopied(true);
@@ -87,9 +164,9 @@ export default function ResultCard({ card, brandName = '你的品牌', onRegener
         </div>
       </header>
       <div className={`result-stage stage-${card.platform}`}>
-        {card.platform === 'xhs' && <XhsPreview card={card} brandName={brandName} />}
-        {card.platform === 'dy' && <DouyinPreview card={card} brandName={brandName} />}
-        {card.platform === 'amazon' && <AmazonPreview card={card} />}
+        {card.platform === 'xhs' && <XhsPreview card={card} brandName={brandName} image={image} dragOver={dragOver} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} />}
+        {card.platform === 'dy' && <DouyinPreview card={card} brandName={brandName} image={image} dragOver={dragOver} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} />}
+        {card.platform === 'amazon' && <AmazonPreview card={card} image={image} dragOver={dragOver} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} />}
       </div>
       <footer className="result-footer"><span className="check">✓ 信息结构通过</span><span className="check">✓ 平台格式已适配</span>{quality && <span className={`quality-pill ${quality.score >= 80 ? 'good' : 'review'}`}>质量 {quality.score}</span>}<span className="tip">生成内容请在发布前核对产品事实</span></footer>
     </article>

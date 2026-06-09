@@ -8,6 +8,7 @@ import ProfilePanel from '@/components/ProfilePanel';
 import Sidebar, { type ConversationSummary } from '@/components/Sidebar';
 import WelcomeScreen from '@/components/WelcomeScreen';
 import WorkspacePanel from '@/components/WorkspacePanel';
+import ImageGenPanel from '@/components/ImageGenPanel';
 import { PLATFORM_LABELS, type Platform } from '@/lib/platforms';
 import { getProfile, listProducts, type Product, type UserProfile } from '@/lib/api';
 import { useChat, DEMO_CONVERSATION } from '@/hooks/useChat';
@@ -123,6 +124,11 @@ export default function Home() {
         ) : <WelcomeScreen onSelect={startFromPlatform} profile={profile} onProfileOpen={() => setProfileOpen(true)} />}
 
         {view === 'chat' && chat.activeConversation && <InputBar onSend={(text, imageUrl) => { chat.send(text, imageUrl); setDraft(''); }} onTextChange={setDraft} pending={chat.pending} text={draft} onStop={chat.stop} />}
+        {view === 'chat' && chat.platform === 'design' && (
+          <div className="image-gen-panel-wrapper">
+            <ImageGenPanel product={draft || undefined} />
+          </div>
+        )}
       </main>
       <ProfilePanel open={profileOpen} onClose={() => setProfileOpen(false)} onSaved={setProfile} />
       <WorkspacePanel open={workspaceOpen} onClose={() => { setWorkspaceOpen(false); listProducts().then(setProducts).catch(() => undefined); }} activeProductId={chat.activeProductId} onActiveProductChange={(productId) => {

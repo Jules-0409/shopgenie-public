@@ -470,3 +470,28 @@ async def api_poll_image(task_id: str, settings: Settings = Depends(get_settings
         raise HTTPException(status_code=408, detail="图片生成超时")
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+# --- Design Templates ---
+
+
+@app.get("/api/design/templates")
+async def api_design_templates() -> dict:
+    """返回生图 prompt 模板列表，供前端 ImageGenPanel 使用。"""
+    from app.design_image_prompts import ALL_TEMPLATES, TEMPLATES_BY_CATEGORY, PLATFORM_SIZES
+
+    templates = [
+        {
+            "id": t.id,
+            "name": t.name,
+            "description": t.description,
+            "aspect_ratio": t.aspect_ratio,
+            "tags": t.tags,
+        }
+        for t in ALL_TEMPLATES
+    ]
+    categories = {
+        key: {"name": val["name"], "template_ids": [t.id for t in val["templates"]]}
+        for key, val in TEMPLATES_BY_CATEGORY.items()
+    }
+    return {"templates": templates, "categories": categories, "platform_sizes": PLATFORM_SIZES}
