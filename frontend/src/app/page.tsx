@@ -92,14 +92,8 @@ export default function Home() {
                 </span>
                 <span className="topbar-title">{chat.activeConversation.title}</span>
                 {chat.activeProductId && <span className="active-product-chip">{products.find((item) => item.id === chat.activeProductId)?.name ?? '商品事实'}</span>}
-                <button aria-label="内容工作台" className="icon-button optional workspace-trigger" onClick={() => { setWorkspaceAssetId(null); setWorkspaceOpen(true); }} title="内容工作台">OS</button>
-                <button aria-label="品牌档案" className="icon-button optional" onClick={() => setProfileOpen(true)} title="品牌档案">📋</button>
               </>
             ) : <span className="topbar-title">开始一段新对话</span>}
-            <div className="view-toggle">
-              <button className={view === 'chat' ? 'active' : ''} onClick={() => setView('chat')}>对话</button>
-              <button className={view === 'welcome' ? 'active' : ''} onClick={newChat}>新对话</button>
-            </div>
           </div>
         </header>
 
