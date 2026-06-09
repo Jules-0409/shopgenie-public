@@ -107,7 +107,7 @@ async def chat_stream_generator(
             "warnings": warnings,
             "conversation_title": conversation_title,
             "asset_id": asset_id,
-            "quality": quality.model_dump() if quality else None,
+            "quality": quality if quality else None,
             "task_id": task.id,
             "sources": [],
         }
