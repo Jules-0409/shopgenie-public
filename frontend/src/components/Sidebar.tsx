@@ -26,7 +26,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ activeId, conversations, mobileOpen, onClose, onSelect, onNew, onDelete, onProfileOpen, onWorkspaceOpen, profile }: SidebarProps) {
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ConversationSummary | null>(null);
 
   const select = (id: string) => {
     onSelect(id);
@@ -38,14 +38,15 @@ export default function Sidebar({ activeId, conversations, mobileOpen, onClose, 
     onClose();
   };
 
-  const handleDelete = (id: string, event: React.MouseEvent) => {
+  const handleDeleteClick = (item: ConversationSummary, event: React.MouseEvent) => {
     event.stopPropagation();
-    if (confirmDeleteId === id) {
-      onDelete(id);
-      setConfirmDeleteId(null);
-    } else {
-      setConfirmDeleteId(id);
-      setTimeout(() => setConfirmDeleteId(null), 3000);
+    setDeleteTarget(item);
+  };
+
+  const confirmDelete = () => {
+    if (deleteTarget) {
+      onDelete(deleteTarget.id);
+      setDeleteTarget(null);
     }
   };
 
@@ -74,13 +75,7 @@ export default function Sidebar({ activeId, conversations, mobileOpen, onClose, 
               <button className={`conversation-item ${item.id === activeId ? 'active' : ''}`} key={item.id} onClick={() => select(item.id)}>
                 <span className={`conversation-dot ${item.platform}`} />
                 <span className="conversation-title">{item.title}</span>
-                <span
-                  className={`conversation-delete${confirmDeleteId === item.id ? ' confirm' : ''}`}
-                  onClick={(e) => handleDelete(item.id, e)}
-                  title={confirmDeleteId === item.id ? '再点一次确认删除' : '删除对话'}
-                >
-                  {confirmDeleteId === item.id ? '确认?' : '×'}
-                </span>
+                <span className="conversation-delete" onClick={(e) => handleDeleteClick(item, e)} title="删除对话">×</span>
               </button>
             ))}
           </section>
@@ -94,6 +89,19 @@ export default function Sidebar({ activeId, conversations, mobileOpen, onClose, 
           {profileTags.length > 0 && <div className="profile-tags">{profileTags.map((tag) => <span className="profile-tag" key={tag}>{tag}</span>)}</div>}
         </button>
       </aside>
+
+      {deleteTarget && (
+        <div className="profile-overlay" onClick={() => setDeleteTarget(null)}>
+          <div className="confirm-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="confirm-title">删除对话</div>
+            <div className="confirm-body">确定要删除「{deleteTarget.title}」吗？此操作无法撤销。</div>
+            <div className="confirm-actions">
+              <button className="confirm-cancel" onClick={() => setDeleteTarget(null)}>取消</button>
+              <button className="confirm-delete" onClick={confirmDelete}>删除</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

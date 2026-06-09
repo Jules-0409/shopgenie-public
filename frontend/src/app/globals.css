@@ -71,7 +71,6 @@ button { color: inherit; }
 .conversation-delete { opacity: 0; color: var(--muted); font-size: 14px; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 4px; cursor: pointer; transition: all .15s; flex-shrink: 0; margin-left: auto; }
 .conversation-item:hover .conversation-delete { opacity: 1; }
 .conversation-delete:hover { color: #ef4444; background: #fef2f2; }
-.conversation-delete.confirm { opacity: 1; color: #ef4444; font-size: 11px; font-weight: 600; }
 .conversation-empty { padding: 18px 9px; color: var(--faint); font-size: 11px; line-height: 1.6; }
 .profile-card { width: calc(100% - 24px); margin: 10px 12px 16px; padding: 12px; border: 1px solid var(--line-soft); border-radius: 13px; background: #faf8f4; text-align: left; cursor: pointer; transition: .16s ease; }
 .profile-card:hover { border-color: #c9bfb4; background: white; box-shadow: var(--shadow-sm); transform: translateY(-1px); }
@@ -153,6 +152,14 @@ button { color: inherit; }
 .profile-cancel { padding: 8px 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); font-size: 13px; cursor: pointer; font-family: 'Noto Sans SC', sans-serif; }
 .profile-save { padding: 8px 18px; border: none; border-radius: 8px; background: var(--xhs); color: white; font-size: 13px; cursor: pointer; font-family: 'Noto Sans SC', sans-serif; }
 .profile-save:disabled { opacity: .6; }
+/* Confirm Dialog */
+.confirm-dialog { width: min(360px, 88vw); background: var(--surface-strong); border-radius: 16px; box-shadow: var(--shadow-lg); padding: 24px; }
+.confirm-title { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+.confirm-body { font-size: 13.5px; color: var(--muted); line-height: 1.6; margin-bottom: 20px; }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.confirm-cancel { padding: 8px 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); font-size: 13px; cursor: pointer; font-family: 'Noto Sans SC', sans-serif; }
+.confirm-delete { padding: 8px 18px; border: none; border-radius: 8px; background: #ef4444; color: white; font-size: 13px; cursor: pointer; font-family: 'Noto Sans SC', sans-serif; }
+.confirm-delete:hover { background: #dc2626; }
 .workspace-overlay { position: fixed; inset: 0; z-index: 110; display: flex; justify-content: flex-end; background: rgba(25,24,22,.34); backdrop-filter: blur(3px); }
 .workspace-panel { width: min(1040px, 94vw); height: 100%; display: flex; flex-direction: column; overflow: hidden; border-left: 1px solid var(--line); background: var(--canvas); box-shadow: -20px 0 70px rgba(30,25,20,.16); }
 .workspace-header { display: flex; align-items: flex-start; gap: 20px; padding: 25px 28px 20px; border-bottom: 1px solid var(--line); background: var(--surface); }
