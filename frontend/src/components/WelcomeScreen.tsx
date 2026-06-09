@@ -33,6 +33,12 @@ const SCENARIOS = [
     description: '售前咨询 + 售后处理的标准化回复模板',
     icon: '💬',
   },
+  {
+    platform: 'design' as Platform,
+    label: '设计助手',
+    description: '商品拍摄指导、主图文案、详情页结构',
+    icon: '🎨',
+  },
 ];
 
 const PlatformIcon = ({ platform }: { platform: Platform }) => {

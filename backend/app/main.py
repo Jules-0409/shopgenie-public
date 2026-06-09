@@ -410,3 +410,63 @@ async def api_save_session(req: SessionInput) -> StoredSession:
 @app.delete("/api/sessions/{session_id}")
 async def api_delete_session(session_id: str) -> dict[str, bool]:
     return {"deleted": await run_in_threadpool(delete_session, session_id)}
+
+
+# --- Vision / Design ---
+
+class ImageAnalyzeInput(BaseModel):
+    image_url: str = Field(min_length=1, max_length=2000)
+    question: str = Field(default="请描述这张商品图片的内容，包括颜色、材质、形状、场景等特征，并提取可能的卖点。", max_length=500)
+
+
+class ImageGenerateInput(BaseModel):
+    prompt: str = Field(min_length=1, max_length=500)
+    size: str = Field(default="1024*1024", max_length=20)
+
+
+class ImageAnalyzeResponse(BaseModel):
+    description: str
+
+
+class ImageGenerateResponse(BaseModel):
+    task_id: str
+    status: str
+
+
+@app.post("/api/vision/analyze", response_model=ImageAnalyzeResponse)
+async def api_analyze_image(req: ImageAnalyzeInput, settings: Settings = Depends(get_settings)) -> ImageAnalyzeResponse:
+    if not settings.dashscope_api_key:
+        raise HTTPException(status_code=503, detail="未配置 DashScope API Key")
+    try:
+        from app.vision import analyze_image
+        result = await analyze_image(req.image_url, req.question, settings)
+        return ImageAnalyzeResponse(description=result)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"图片分析失败: {exc}") from exc
+
+
+@app.post("/api/vision/generate", response_model=ImageGenerateResponse)
+async def api_generate_image(req: ImageGenerateInput, settings: Settings = Depends(get_settings)) -> ImageGenerateResponse:
+    if not settings.dashscope_api_key:
+        raise HTTPException(status_code=503, detail="未配置 DashScope API Key")
+    try:
+        from app.vision import generate_image
+        result = await generate_image(req.prompt, settings, req.size)
+        task_id = result.get("output", {}).get("task_id", "")
+        return ImageGenerateResponse(task_id=task_id, status="submitted")
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"图片生成失败: {exc}") from exc
+
+
+@app.get("/api/vision/generate/{task_id}")
+async def api_poll_image(task_id: str, settings: Settings = Depends(get_settings)) -> dict:
+    if not settings.dashscope_api_key:
+        raise HTTPException(status_code=503, detail="未配置 DashScope API Key")
+    try:
+        from app.vision import poll_image_task
+        result = await poll_image_task(task_id, settings)
+        return result
+    except TimeoutError:
+        raise HTTPException(status_code=408, detail="图片生成超时")
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc

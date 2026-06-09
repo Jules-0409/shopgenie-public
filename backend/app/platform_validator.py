@@ -130,6 +130,7 @@ VALIDATORS = {
     Platform.DOUYIN: validate_douyin,
     Platform.AMAZON: validate_amazon,
     Platform.CS: validate_cs,
+    Platform.DESIGN: validate_cs,  # Design uses same validation as CS (Chinese content)
 }
 
 

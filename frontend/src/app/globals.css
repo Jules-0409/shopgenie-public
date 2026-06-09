@@ -67,6 +67,7 @@ button { color: inherit; }
 .conversation-dot.xhs { background: var(--xhs); box-shadow: 0 0 0 3px rgba(255, 36, 66, .08); }
 .conversation-dot.amazon { background: #ff9900; box-shadow: 0 0 0 3px rgba(255, 153, 0, .1); }
 .conversation-dot.cs { background: #8b5cf6; box-shadow: 0 0 0 3px rgba(139, 92, 246, .1); }
+.conversation-dot.design { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245, 158, 11, .1); }
 .conversation-title { flex: 1; min-width: 0; overflow: hidden; color: var(--muted); font-size: 12.5px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .conversation-item.active .conversation-title { color: var(--ink); font-weight: 600; }
 .conversation-delete { opacity: 0; color: var(--muted); font-size: 14px; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 4px; cursor: pointer; transition: all .15s; flex-shrink: 0; margin-left: auto; }
@@ -93,6 +94,7 @@ button { color: inherit; }
 .platform-pill.dy { border-color: #dedbd7; background: #f4f3f1; color: var(--ink); }
 .platform-pill.amazon { border-color: #ffd08a; background: #fff8eb; color: #7a4a00; }
 .platform-pill.cs { border-color: #c4b5fd; background: #f5f3ff; color: #5b21b6; }
+.platform-pill.design { border-color: #fcd34d; background: #fffbeb; color: #92400e; }
 .topbar-title { min-width: 0; flex: 1; overflow: hidden; color: var(--muted); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .icon-button { width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 9px; background: rgba(255,255,255,.45); color: var(--muted); cursor: pointer; transition: .15s ease; }
 .icon-button:hover { border-color: #c5bdb4; background: white; color: var(--ink); }
