@@ -233,6 +233,8 @@ function ContentTab({ assets, products, selectedAssetId, versions, onSelect, onS
 
 function KnowledgeTab({ sources, onCreated }: { sources: KnowledgeSource[]; onCreated: () => Promise<void> }) {
   const [title, setTitle] = useState(''); const [platform, setPlatform] = useState<Platform>('xhs'); const [content, setContent] = useState(''); const [url, setUrl] = useState(''); const [query, setQuery] = useState(''); const [importing, setImporting] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = sources.find((s) => s.id === selectedId) ?? null;
   const create = async () => {
     if (!title.trim() || !content.trim()) return;
     await createKnowledge({ title, platform, content, source_type: 'platform_rule', url: '' });
@@ -240,7 +242,24 @@ function KnowledgeTab({ sources, onCreated }: { sources: KnowledgeSource[]; onCr
   };
   const importUrl = async () => { if (!url.trim() || importing) return; setImporting(true); try { await importKnowledge(url.trim(), platform); setUrl(''); await onCreated(); } finally { setImporting(false); } };
   const discover = async () => { if (!query.trim() || importing) return; setImporting(true); try { await discoverKnowledge(query.trim(), platform); setQuery(''); await onCreated(); } finally { setImporting(false); } };
-  return <div className="workspace-grid"><div className="workspace-list">{sources.map((source) => <div className="workspace-list-item static" key={source.id}><strong>{source.title}</strong><span>{source.platform ? PLATFORM_LABELS[source.platform] : '通用'} · {source.content.slice(0, 60)}</span>{source.url && <a href={source.url} rel="noreferrer" target="_blank">查看原始来源</a>}</div>)}</div><div className="workspace-editor"><div className="workspace-section-title">发现最新规则、趋势或竞品资料</div><label>检索主题<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="例如：2026 小红书家居好物内容趋势" /></label><label>平台<select value={platform} onChange={(event) => setPlatform(event.target.value as Platform)}>{Object.entries(PLATFORM_LABELS).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><button className="workspace-primary" disabled={!query.trim() || importing} onClick={discover}>{importing ? '检索中…' : '发现并保存来源'}</button><div className="workspace-divider">导入指定网页</div><label>网页 URL<input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://..." /></label><button className="workspace-primary" disabled={!url.trim() || importing} onClick={importUrl}>{importing ? '抓取中…' : '抓取并保存来源'}</button><div className="workspace-divider">或手动添加</div><label>标题<input value={title} onChange={(event) => setTitle(event.target.value)} /></label><label>内容<textarea className="content-editor-body" value={content} onChange={(event) => setContent(event.target.value)} placeholder="粘贴平台规则、商品说明或经过验证的运营知识" /></label><button className="workspace-primary" onClick={create}>加入知识库</button></div></div>;
+  return <div className="workspace-grid"><div className="workspace-list">{sources.map((source) => <button className={`workspace-list-item${selectedId === source.id ? ' selected' : ''}`} key={source.id} onClick={() => setSelectedId(source.id)}><strong>{source.title}</strong><span>{source.platform ? PLATFORM_LABELS[source.platform] : '通用'} · {source.content.slice(0, 60)}</span></button>)}</div><div className="workspace-editor">{selected ? (<>
+    <div className="workspace-section-title">{selected.title}</div>
+    <div className="knowledge-meta"><span className="knowledge-tag">{selected.platform ? PLATFORM_LABELS[selected.platform] : '通用'}</span><span className="knowledge-type">{selected.source_type}</span>{selected.url && <a href={selected.url} rel="noreferrer" target="_blank">查看原始来源 →</a>}</div>
+    <div className="knowledge-content">{selected.content}</div>
+    <button className="workspace-secondary" onClick={() => setSelectedId(null)}>返回列表</button>
+  </>) : (<>
+    <div className="workspace-section-title">发现最新规则、趋势或竞品资料</div>
+    <label>检索主题<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="例如：2026 小红书家居好物内容趋势" /></label>
+    <label>平台<select value={platform} onChange={(event) => setPlatform(event.target.value as Platform)}>{Object.entries(PLATFORM_LABELS).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
+    <button className="workspace-primary" disabled={!query.trim() || importing} onClick={discover}>{importing ? '检索中…' : '发现并保存来源'}</button>
+    <div className="workspace-divider">导入指定网页</div>
+    <label>网页 URL<input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://..." /></label>
+    <button className="workspace-primary" disabled={!url.trim() || importing} onClick={importUrl}>{importing ? '抓取中…' : '抓取并保存来源'}</button>
+    <div className="workspace-divider">或手动添加</div>
+    <label>标题<input value={title} onChange={(event) => setTitle(event.target.value)} /></label>
+    <label>内容<textarea className="content-editor-body" value={content} onChange={(event) => setContent(event.target.value)} placeholder="粘贴平台规则、商品说明或经过验证的运营知识" /></label>
+    <button className="workspace-primary" onClick={create}>加入知识库</button>
+  </>)}</div></div>;
 }
 
 function TasksTab({ tasks, assets, onCompleted }: { tasks: AgentTask[]; assets: ContentAsset[]; onCompleted: () => Promise<void> }) {

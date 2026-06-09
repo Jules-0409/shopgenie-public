@@ -195,7 +195,12 @@ button { color: inherit; }
 .workspace-list-item { width: 100%; display: flex; flex-direction: column; gap: 4px; padding: 10px; border: 1px solid transparent; border-radius: 10px; background: #f7f4ef; text-align: left; cursor: pointer; }
 .workspace-list-item:hover, .workspace-list-item.selected { border-color: #bbb1a5; background: white; }
 .workspace-list-item.selected { box-shadow: inset 3px 0 var(--green); }
-.workspace-list-item.static { cursor: default; }
+.knowledge-content { font-size: 13px; line-height: 1.8; color: var(--ink); white-space: pre-wrap; max-height: 400px; overflow-y: auto; padding: 14px; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--surface); margin: 12px 0; }
+.knowledge-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.knowledge-tag { padding: 2px 8px; border-radius: 4px; background: #f5f3ff; color: #5b21b6; font-size: 11px; font-weight: 600; }
+.knowledge-type { font-size: 11px; color: var(--faint); }
+.knowledge-meta a { font-size: 11px; color: var(--xhs); margin-left: auto; }
+.workspace-secondary { padding: 6px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); font-size: 12px; cursor: pointer; font-family: 'Noto Sans SC', sans-serif; }
 .workspace-list-item strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-list-item span { color: var(--muted); font-size: 9.5px; line-height: 1.5; }
 .workspace-editor { display: flex; flex-direction: column; gap: 12px; }
