@@ -4,7 +4,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import type { Message } from '@/components/ChatBubble';
 import type { Platform } from '@/lib/platforms';
 import { PLATFORM_LABELS } from '@/lib/platforms';
-import { sendChatStream } from '@/lib/api';
+import { saveStoredSession, deleteStoredSession, listStoredSessions, sendChatStream } from '@/lib/api';
 
 interface Conversation {
   id: string;
@@ -62,7 +62,30 @@ export function useChat(defaultProductId: string | null) {
   const platform = activeConversation?.platform ?? 'xhs';
   const activeProductId = activeConversation?.productId ?? defaultProductId;
 
-  const hydrate = useCallback(() => {
+  const hydrate = useCallback(async () => {
+    // Try loading from backend first
+    try {
+      const stored = await listStoredSessions();
+      if (stored.length > 0) {
+        const restored: Conversation[] = stored.map((s) => ({
+          id: s.id, title: s.title, platform: s.platform as Platform,
+          productId: s.product_id, messages: s.messages as unknown as Message[],
+        }));
+        setConversations([...restored, DEMO_CONVERSATION]);
+        setActiveId(restored[0].id);
+        idCounter.current = restored.reduce((max, c) => {
+          const maxId = c.messages.reduce((m, msg) => {
+            const num = parseInt(msg.id.replace('message-', ''), 10);
+            return isNaN(num) ? m : Math.max(m, num);
+          }, 0);
+          return Math.max(max, maxId);
+        }, 0) + 1;
+        setHydrated(true);
+        return;
+      }
+    } catch { /* fall back to localStorage */ }
+
+    // Fallback: localStorage
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (raw) {
       try {
@@ -88,7 +111,16 @@ export function useChat(defaultProductId: string | null) {
   const persist = useCallback(() => {
     if (!hydrated) return;
     const serializable = conversations.filter((c) => c.id !== 'demo-xhs');
+    // Save to localStorage as backup
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(serializable));
+    // Save each session to backend
+    for (const conv of serializable) {
+      saveStoredSession({
+        id: conv.id, platform: conv.platform, title: conv.title,
+        product_id: conv.productId ?? null,
+        messages: conv.messages as unknown as Record<string, unknown>[],
+      }).catch(() => { /* ignore save errors */ });
+    }
   }, [conversations, hydrated]);
 
   const appendMessage = useCallback((conversationId: string, message: Message) => {
@@ -234,6 +266,8 @@ export function useChat(defaultProductId: string | null) {
       }
       return filtered;
     });
+    // Delete from backend (don't await)
+    deleteStoredSession(id).catch(() => { /* ignore */ });
   }, [activeId]);
 
   return {

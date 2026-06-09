@@ -275,3 +275,20 @@ export const getPerformanceInsights = () => requestJson<PerformanceInsights>('/a
 export const createPerformance = (record: Omit<PerformanceRecord, 'id' | 'recorded_at'>) => requestJson<PerformanceRecord>('/api/performance', {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(record),
 });
+
+export interface StoredSession {
+  id: string;
+  platform: Platform;
+  title: string;
+  product_id: string | null;
+  messages: Record<string, unknown>[];
+  created_at: string;
+  updated_at: string;
+}
+
+export const listStoredSessions = () => requestJson<StoredSession[]>('/api/sessions');
+export const getStoredSession = (id: string) => requestJson<StoredSession>(`/api/sessions/${id}`);
+export const saveStoredSession = (session: Omit<StoredSession, 'created_at' | 'updated_at'>) => requestJson<StoredSession>('/api/sessions', {
+  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(session),
+});
+export const deleteStoredSession = (id: string) => requestJson<{ deleted: boolean }>(`/api/sessions/${id}`, { method: 'DELETE' });

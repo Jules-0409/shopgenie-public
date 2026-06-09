@@ -1,6 +1,6 @@
 import logging
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException
@@ -12,6 +12,7 @@ from app.config import Settings, get_settings
 from app.deepseek import DeepSeekClient, DeepSeekError
 from app.stream import chat_stream_generator
 from app.memory import UserProfile, get_profile, save_profile, delete_profile
+from app.sessions import StoredSession, list_sessions, get_session, save_session, delete_session
 from app.knowledge_fetch import fetch_public_page
 from app.web_search import discover_knowledge, needs_web_discovery
 from app.schemas import ChatRequest, ChatResponse, GeneratedContent, Platform
@@ -371,3 +372,41 @@ async def api_create_performance(req: PerformanceInput) -> PerformanceRecord:
     data = req.model_dump()
     data["platform"] = req.platform.value
     return await run_in_threadpool(save_performance, PerformanceRecord(**data))
+
+
+# --- Sessions ---
+
+class SessionInput(BaseModel):
+    id: str = Field(min_length=1, max_length=80)
+    platform: Platform
+    title: str = Field(default="", max_length=200)
+    product_id: str | None = None
+    messages: list[dict[str, Any]] = Field(default_factory=list, max_length=500)
+
+
+@app.get("/api/sessions", response_model=list[StoredSession])
+async def api_list_sessions() -> list[StoredSession]:
+    return await run_in_threadpool(list_sessions)
+
+
+@app.get("/api/sessions/{session_id}", response_model=StoredSession)
+async def api_get_session(session_id: str) -> StoredSession:
+    session = await run_in_threadpool(get_session, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    return session
+
+
+@app.post("/api/sessions", response_model=StoredSession)
+async def api_save_session(req: SessionInput) -> StoredSession:
+    session = StoredSession(
+        id=req.id, platform=req.platform.value, title=req.title,
+        product_id=req.product_id, messages=req.messages,
+    )
+    await run_in_threadpool(save_session, session)
+    return session
+
+
+@app.delete("/api/sessions/{session_id}")
+async def api_delete_session(session_id: str) -> dict[str, bool]:
+    return {"deleted": await run_in_threadpool(delete_session, session_id)}
