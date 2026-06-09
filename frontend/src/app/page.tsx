@@ -116,7 +116,7 @@ export default function Home() {
               })}
             </div>
           </div>
-        ) : <WelcomeScreen onSelect={startFromPlatform} profile={profile} />}
+        ) : <WelcomeScreen onSelect={startFromPlatform} profile={profile} onProfileOpen={() => setProfileOpen(true)} />}
 
         {view === 'chat' && chat.activeConversation && <InputBar onSend={(text) => { chat.send(text); setDraft(''); }} onTextChange={setDraft} pending={chat.pending} text={draft} onStop={chat.stop} />}
       </main>

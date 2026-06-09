@@ -108,19 +108,22 @@ export function useChat(defaultProductId: string | null) {
     setHydrated(true);
   }, []);
 
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const persist = useCallback(() => {
     if (!hydrated) return;
-    const serializable = conversations.filter((c) => c.id !== 'demo-xhs');
-    // Save to localStorage as backup
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(serializable));
-    // Save each session to backend
-    for (const conv of serializable) {
-      saveStoredSession({
-        id: conv.id, platform: conv.platform, title: conv.title,
-        product_id: conv.productId ?? null,
-        messages: conv.messages as unknown as Record<string, unknown>[],
-      }).catch(() => { /* ignore save errors */ });
-    }
+    if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+    persistTimerRef.current = setTimeout(() => {
+      const serializable = conversations.filter((c) => c.id !== 'demo-xhs');
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(serializable));
+      for (const conv of serializable) {
+        saveStoredSession({
+          id: conv.id, platform: conv.platform, title: conv.title,
+          product_id: conv.productId ?? null,
+          messages: conv.messages as unknown as Record<string, unknown>[],
+        }).catch(() => { /* ignore */ });
+      }
+    }, 1500);
   }, [conversations, hydrated]);
 
   const appendMessage = useCallback((conversationId: string, message: Message) => {

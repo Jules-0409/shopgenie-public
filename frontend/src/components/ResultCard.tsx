@@ -83,7 +83,7 @@ export default function ResultCard({ card, brandName = '你的品牌', onRegener
         <div className="result-actions">
           {onRegenerate && <button className="action-button" onClick={onRegenerate}><IconRefresh /> 再来一版</button>}
           {onEdit && <button className="action-button" onClick={onEdit}>编辑与版本</button>}
-          <button className="action-button primary" onClick={copy}><IconCopy /> {copied ? '已复制' : '复制全文'}</button>
+          <button className={`action-button primary${copied ? ' copied' : ''}`} onClick={copy}><IconCopy /> {copied ? '✓ 已复制' : '复制全文'}</button>
         </div>
       </header>
       <div className={`result-stage stage-${card.platform}`}>

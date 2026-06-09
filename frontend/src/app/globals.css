@@ -262,6 +262,7 @@ button { color: inherit; }
 .action-button { display: flex; align-items: center; gap: 5px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 7px; background: white; color: var(--muted); font-size: 11px; font-weight: 600; cursor: pointer; transition: .15s ease; }
 .action-button:hover { border-color: #bdb4aa; color: var(--ink); }
 .action-button.primary { border-color: var(--ink); background: var(--ink); color: white; }
+.action-button.primary.copied { border-color: #22c55e; background: #22c55e; }
 .result-body { display: grid; grid-template-columns: minmax(280px, .8fr) minmax(320px, 1.2fr); background: #eee9e2; }
 .cover-panel { min-height: 470px; display: flex; flex-direction: column; justify-content: space-between; padding: 22px; background: linear-gradient(155deg, #eadfd1 0%, #f7f1e8 58%, #dfd3c4 100%); }
 .post-author { display: flex; align-items: center; gap: 9px; }
@@ -363,6 +364,8 @@ button { color: inherit; }
 .welcome-title { margin: 12px 0 8px; font: clamp(42px, 6vw, 68px)/1 'Instrument Serif', serif; letter-spacing: -.04em; text-align: center; }
 .welcome-sub { max-width: 590px; margin: 0 auto; color: var(--muted); font-family: 'Noto Sans SC', sans-serif; font-size: 14px; line-height: 1.7; text-align: center; }
 .memory-chip { width: fit-content; margin: 22px auto 0; padding: 8px 13px; border: 1px solid var(--line); border-radius: 99px; background: rgba(255,255,255,.72); color: var(--muted); font-size: 11px; box-shadow: var(--shadow-sm); }
+.memory-chip.clickable { cursor: pointer; transition: all .15s; }
+.memory-chip.clickable:hover { border-color: var(--xhs); color: var(--xhs); background: #fff5f7; }
 .platform-preview-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 38px; }
 .platform-preview-card { width: 100%; min-width: 0; padding: 13px; overflow: hidden; appearance: none; border: 1px solid var(--line); border-radius: 20px; background: rgba(255,254,250,.94); text-align: left; cursor: pointer; box-shadow: var(--shadow-sm); transition: .2s ease; }
 .platform-preview-card:hover { transform: translateY(-4px); border-color: #bdb4aa; box-shadow: var(--shadow-lg); }

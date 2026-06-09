@@ -61,7 +61,7 @@ const Preview = ({ platform, brandName }: { platform: Platform; brandName: strin
   );
 };
 
-export default function WelcomeScreen({ onSelect, profile }: { onSelect: (platform: Platform, title: string) => void; profile: UserProfile | null }) {
+export default function WelcomeScreen({ onSelect, profile, onProfileOpen }: { onSelect: (platform: Platform, title: string) => void; profile: UserProfile | null; onProfileOpen?: () => void }) {
   const brandName = profile?.brand_name || '你的品牌';
   const memoryItems = profile
     ? [profile.brand_name, profile.category, profile.tone, ...profile.style_preferences].filter(Boolean).slice(0, 4)
@@ -89,7 +89,7 @@ export default function WelcomeScreen({ onSelect, profile }: { onSelect: (platfo
             </button>
           ))}
         </div>
-        <div className="memory-chip">{memoryItems.length > 0 ? `● 已记住：${memoryItems.join(' · ')}` : '○ 设置品牌档案后，生成内容会更贴合你的风格'}</div>
+        <div className={`memory-chip${!memoryItems.length && onProfileOpen ? ' clickable' : ''}`} onClick={!memoryItems.length && onProfileOpen ? onProfileOpen : undefined}>{memoryItems.length > 0 ? `● 已记住：${memoryItems.join(' · ')}` : '○ 设置品牌档案后，生成内容会更贴合你的风格'}</div>
       </div>
     </div>
   );

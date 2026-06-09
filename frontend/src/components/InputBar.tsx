@@ -20,7 +20,7 @@ export default function InputBar({ pending, text, onSend, onTextChange, onStop }
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
+    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey || (!event.shiftKey && !event.metaKey && !event.ctrlKey))) {
       event.preventDefault();
       submit();
     }

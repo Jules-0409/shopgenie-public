@@ -69,6 +69,12 @@ export default function WorkspacePanel({ open, onClose, activeProductId, onActiv
 
   useEffect(() => {
     if (!open) return;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = ''; };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
     void Promise.resolve().then(() => {
       void refresh();
       if (targetAssetId) {
