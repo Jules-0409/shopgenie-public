@@ -255,6 +255,12 @@ button { color: inherit; }
 .performance-summary p { margin: 8px 0 0; color: var(--muted); font-size: 10px; line-height: 1.6; }
 .stop-button { background: #ef4444 !important; color: white !important; }
 .stop-button:hover { background: #dc2626 !important; }
+.icon-button-sm { width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; transition: .15s; }
+.icon-button-sm:hover { border-color: #c5bdb4; background: white; color: var(--ink); }
+.image-preview-bar { display: flex; align-items: center; gap: 8px; padding: 8px; margin-bottom: 6px; border: 1px solid var(--line-soft); border-radius: 10px; background: #faf8f4; }
+.image-preview-bar img { width: 48px; height: 48px; object-fit: cover; border-radius: 6px; }
+.image-preview-remove { width: 20px; height: 20px; border: none; border-radius: 50%; background: #ef4444; color: white; font-size: 12px; cursor: pointer; display: grid; place-items: center; }
+.composer-actions { display: flex; align-items: center; gap: 6px; }
 .regenerate-button { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; margin-top: 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--muted); font-size: 11.5px; cursor: pointer; transition: all .15s; font-family: 'Noto Sans SC', sans-serif; }
 .regenerate-button:hover { border-color: var(--xhs); color: var(--xhs); background: #fff5f7; }
 .typing-indicator { display: flex; align-items: center; gap: 4px; padding: 12px 18px !important; }

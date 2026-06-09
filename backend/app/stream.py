@@ -40,7 +40,23 @@ async def chat_stream_generator(
         if product:
             product = await run_in_threadpool(learn_product_from_message, product, request.message)
 
-        # Step 2: Knowledge discovery (if needed)
+        # Step 2: Image analysis (if provided)
+        image_context = ""
+        if request.image_url:
+            yield sse_event("status", {"step": "analyzing", "message": "正在分析图片..."})
+            try:
+                from app.vision import analyze_image
+                image_analysis = await analyze_image(
+                    request.image_url,
+                    "请详细描述这张商品图片的内容，包括颜色、材质、形状、场景、文字等所有可见特征，并提取可能的卖点。",
+                    settings,
+                )
+                image_context = f"\n\n【用户上传的图片分析】\n{image_analysis}\n请基于以上图片信息辅助生成内容。"
+            except Exception as exc:
+                logger.warning("Image analysis failed: %s", exc)
+                image_context = "\n\n【图片分析失败】用户上传了图片但分析失败，请基于文字描述生成。"
+
+        # Step 3: Knowledge discovery (if needed)
         from app.web_search import needs_web_discovery
         if needs_web_discovery(request.message):
             yield sse_event("status", {"step": "discovering", "message": "正在发现相关知识..."})
@@ -51,15 +67,13 @@ async def chat_stream_generator(
             except (httpx.HTTPError, ValueError) as exc:
                 logger.warning("Knowledge discovery failed: %s", exc)
 
-        # Step 3: Generating
+        # Step 7: Generate
         yield sse_event("status", {"step": "generating", "message": "正在生成内容..."})
-
-        # Step 4: Stream tokens from DeepSeek
         yield sse_event("status", {"step": "streaming", "message": "模型输出中..."})
 
         client = DeepSeekClient(settings, profile=profile, product=product)
         full_content = ""
-        async for token in client.chat_stream(request):
+        async for token in client.chat_stream(request, extra_context=image_context):
             full_content += token
             yield sse_event("token", {"text": token})
 

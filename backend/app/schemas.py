@@ -22,6 +22,7 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=500)
     history: list[ChatMessage] = Field(default_factory=list, max_length=12)
     product_id: str | None = Field(default=None, max_length=80)
+    image_url: str | None = Field(default=None, max_length=5000)
 
 
 class Usage(BaseModel):

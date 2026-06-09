@@ -1,22 +1,28 @@
 'use client';
 
-import type { KeyboardEvent } from 'react';
+import type { ChangeEvent, KeyboardEvent } from 'react';
+import { useRef, useState } from 'react';
 import { IconSend } from './Icons';
 
 interface InputBarProps {
   pending: boolean;
   text: string;
-  onSend: (text: string) => void;
+  onSend: (text: string, imageUrl?: string) => void;
   onTextChange: (text: string) => void;
   onStop?: () => void;
 }
 
 export default function InputBar({ pending, text, onSend, onTextChange, onStop }: InputBarProps) {
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
   const submit = () => {
     const value = text.trim();
-    if (!value || pending) return;
-    onSend(value);
+    if (!value && !imagePreview) return;
+    if (pending) return;
+    onSend(value || '请分析这张图片', imagePreview ?? undefined);
     onTextChange('');
+    setImagePreview(null);
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -26,18 +32,43 @@ export default function InputBar({ pending, text, onSend, onTextChange, onStop }
     }
   };
 
+  const handleImageSelect = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      alert('图片不能超过 5MB');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setImagePreview(reader.result as string);
+    reader.readAsDataURL(file);
+    event.target.value = '';
+  };
+
   return (
     <div className="composer-area">
       <div className="composer">
+        {imagePreview && (
+          <div className="image-preview-bar">
+            <img src={imagePreview} alt="待发送图片" />
+            <button className="image-preview-remove" onClick={() => setImagePreview(null)}>×</button>
+          </div>
+        )}
         <textarea
           maxLength={500}
           onChange={(event) => onTextChange(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="继续和我说，或告诉我新商品信息…"
+          placeholder={imagePreview ? '描述一下你想让 AI 做什么（可选）…' : '继续和我说，或告诉我新商品信息…'}
           rows={2}
           value={text}
         />
         <div className="composer-footer">
+          <div className="composer-actions">
+            <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImageSelect} />
+            <button aria-label="上传图片" className="icon-button-sm" onClick={() => fileRef.current?.click()} title="上传图片">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="m21 15-5-5L5 21" /></svg>
+            </button>
+          </div>
           <span>Enter 发送 · Shift + Enter 换行</span>
           <span className="count">{text.length} / 500</span>
           {pending ? (
@@ -45,7 +76,7 @@ export default function InputBar({ pending, text, onSend, onTextChange, onStop }
               <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><rect x="2" y="2" width="10" height="10" rx="2" /></svg>
             </button>
           ) : (
-            <button aria-label="发送消息" className="send-button" disabled={!text.trim()} onClick={submit}><IconSend /></button>
+            <button aria-label="发送消息" className="send-button" disabled={!text.trim() && !imagePreview} onClick={submit}><IconSend /></button>
           )}
         </div>
       </div>

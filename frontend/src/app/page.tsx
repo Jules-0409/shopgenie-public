@@ -122,7 +122,7 @@ export default function Home() {
           </div>
         ) : <WelcomeScreen onSelect={startFromPlatform} profile={profile} onProfileOpen={() => setProfileOpen(true)} />}
 
-        {view === 'chat' && chat.activeConversation && <InputBar onSend={(text) => { chat.send(text); setDraft(''); }} onTextChange={setDraft} pending={chat.pending} text={draft} onStop={chat.stop} />}
+        {view === 'chat' && chat.activeConversation && <InputBar onSend={(text, imageUrl) => { chat.send(text, imageUrl); setDraft(''); }} onTextChange={setDraft} pending={chat.pending} text={draft} onStop={chat.stop} />}
       </main>
       <ProfilePanel open={profileOpen} onClose={() => setProfileOpen(false)} onSaved={setProfile} />
       <WorkspacePanel open={workspaceOpen} onClose={() => { setWorkspaceOpen(false); listProducts().then(setProducts).catch(() => undefined); }} activeProductId={chat.activeProductId} onActiveProductChange={(productId) => {

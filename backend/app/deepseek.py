@@ -218,7 +218,7 @@ class DeepSeekClient:
         ) as client:
             return await self._request(client, payload, headers)
 
-    async def chat_stream(self, request: ChatRequest):
+    async def chat_stream(self, request: ChatRequest, extra_context: str = ""):
         """Stream tokens from DeepSeek API. Yields string tokens."""
         system_prompt = build_system_prompt(request.platform)
         memory_prompt = build_memory_prompt(self._profile)
@@ -246,6 +246,8 @@ class DeepSeekClient:
                     system_prompt = f"{system_prompt}\n\n{competitive_context}"
             except Exception as exc:
                 logger.warning("Competitive analysis failed: %s", exc)
+        if extra_context:
+            system_prompt = f"{system_prompt}\n\n{extra_context}"
 
         payload = {
             "model": self.settings.deepseek_model,

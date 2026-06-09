@@ -151,6 +151,7 @@ export function useChat(defaultProductId: string | null) {
     history: { role: 'user' | 'assistant'; content: string }[],
     appendUser: boolean,
     productId?: string | null,
+    imageUrl?: string,
   ) => {
     if (pending) return;
     setPending(true);
@@ -168,7 +169,7 @@ export function useChat(defaultProductId: string | null) {
 
     try {
       let finalResult: Record<string, unknown> | null = null;
-      for await (const event of sendChatStream(requestPlatform, text, history, productId ?? undefined, controller.signal)) {
+      for await (const event of sendChatStream(requestPlatform, text, history, productId ?? undefined, controller.signal, imageUrl)) {
         if (event.event === 'status') {
           updatePendingText(conversationId, pendingMessage.id, String(event.data.message ?? ''));
         } else if (event.event === 'result') {
@@ -218,14 +219,14 @@ export function useChat(defaultProductId: string | null) {
     return conversation;
   }, [defaultProductId]);
 
-  const send = useCallback(async (text: string) => {
+  const send = useCallback(async (text: string, imageUrl?: string) => {
     if (pending) return;
     const conversation = activeConversation ?? createConversation(platform);
     const history = conversation.messages.filter((m) => !m.demo && !m.status).slice(-10).map((m) => ({
       role: m.role === 'ai' ? 'assistant' as const : 'user' as const,
       content: historyContent(m),
     }));
-    await requestResponse(conversation.id, conversation.platform, text, history, true, conversation.productId ?? defaultProductId);
+    await requestResponse(conversation.id, conversation.platform, text, history, true, conversation.productId ?? defaultProductId, imageUrl);
   }, [pending, activeConversation, platform, createConversation, requestResponse, defaultProductId]);
 
   const stop = useCallback(() => {

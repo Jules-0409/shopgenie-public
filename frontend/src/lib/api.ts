@@ -169,11 +169,12 @@ export async function* sendChatStream(
   history: ApiHistoryMessage[],
   productId?: string,
   signal?: AbortSignal,
+  imageUrl?: string,
 ): AsyncGenerator<StreamEvent> {
   const response = await fetch('/shopgenie/api/chat/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ platform, message, history, product_id: productId || null }),
+    body: JSON.stringify({ platform, message, history, product_id: productId || null, image_url: imageUrl || null }),
     signal,
   });
 
