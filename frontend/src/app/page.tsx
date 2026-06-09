@@ -1,43 +1,16 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import ChatBubble, { type Message, type Question } from '@/components/ChatBubble';
-import { AmazonMark, BrandMark, DyMark, IconHistory, IconShare, XhsMark } from '@/components/Icons';
+import ChatBubble from '@/components/ChatBubble';
+import { AmazonMark, BrandMark, DyMark, XhsMark } from '@/components/Icons';
 import InputBar from '@/components/InputBar';
 import ProfilePanel from '@/components/ProfilePanel';
 import Sidebar, { type ConversationSummary } from '@/components/Sidebar';
 import WelcomeScreen from '@/components/WelcomeScreen';
+import WorkspacePanel from '@/components/WorkspacePanel';
 import { PLATFORM_LABELS, type Platform } from '@/lib/platforms';
-import { sendChat } from '@/lib/api';
-
-interface Conversation {
-  id: string;
-  title: string;
-  platform: Platform;
-  messages: Message[];
-}
-
-const STORAGE_KEY = 'shopgenie.conversations.v1';
-
-const NOTE = {
-  platform: 'xhs' as const,
-  title: '干皮姐妹别划走！敷完这个面膜我室友问我打了水光针 💧',
-  body: `这是一个演示样例，用来展示结果卡片长什么样。
-
-真实生成已经接入后端：点击“新对话”，输入你的商品事实，我会基于真实信息生成内容；信息不足时会先追问，不会硬编。`,
-  tags: ['面膜推荐', '补水面膜', '敏感肌护肤', '干皮救星'],
-  sections: [],
-};
-
-const DEMO_CONVERSATION: Conversation = {
-  id: 'demo-xhs',
-  title: '玻尿酸面膜 · 种草笔记',
-  platform: 'xhs',
-  messages: [
-    { id: 'demo-user', role: 'user', text: '帮我写个小红书笔记，玻尿酸补水面膜，真实分享风格', demo: true },
-    { id: 'demo-ai', role: 'ai', text: '这是演示卡片。真实生成请点“新对话”后输入商品信息。', card: NOTE, demo: true },
-  ],
-};
+import { getProfile, listProducts, type Product, type UserProfile } from '@/lib/api';
+import { useChat, DEMO_CONVERSATION } from '@/hooks/useChat';
 
 const starterText: Record<Platform, string> = {
   xhs: '我想写一篇小红书种草笔记，产品是：',
@@ -45,79 +18,47 @@ const starterText: Record<Platform, string> = {
   amazon: 'I want to create an Amazon listing. Product facts: ',
 };
 
-const titleFromMessage = (text: string, platform: Platform) => {
-  const clean = text.replace(/\s+/g, ' ').trim();
-  if (clean) return clean.length > 18 ? `${clean.slice(0, 18)}…` : clean;
-  return `${PLATFORM_LABELS[platform]} 新对话`;
-};
-
 export default function Home() {
-  const [activeId, setActiveId] = useState<string | null>('demo-xhs');
-  const [conversations, setConversations] = useState<Conversation[]>([DEMO_CONVERSATION]);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [pending, setPending] = useState(false);
   const [draft, setDraft] = useState('');
-  const [hydrated, setHydrated] = useState(false);
   const [view, setView] = useState<'chat' | 'welcome'>('chat');
   const [profileOpen, setProfileOpen] = useState(false);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [defaultProductId, setDefaultProductId] = useState<string | null>(null);
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const [workspaceAssetId, setWorkspaceAssetId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const idCounter = useRef(1);
-  const abortRef = useRef<AbortController | null>(null);
 
+  const chat = useChat(defaultProductId);
+
+  // Load profile and products on mount
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        try {
-          const saved = JSON.parse(raw) as Conversation[];
-          if (Array.isArray(saved) && saved.length > 0) {
-            setConversations([...saved, DEMO_CONVERSATION]);
-            setActiveId(saved[0].id);
-            setView('chat');
-            idCounter.current = saved.reduce((total, conversation) => total + conversation.messages.length, saved.length) + 100;
-          }
-        } catch {
-          window.localStorage.removeItem(STORAGE_KEY);
-        }
-      }
-      setHydrated(true);
-    }, 0);
-    return () => window.clearTimeout(timer);
+    getProfile().then(setProfile).catch(() => setProfile(null));
+    listProducts().then((items) => {
+      setProducts(items);
+      if (items.length > 0) setDefaultProductId(items[0].id);
+    }).catch(() => setProducts([]));
   }, []);
 
-  useEffect(() => {
-    if (!hydrated) return;
-    const serializable = conversations.filter((conversation) => conversation.id !== 'demo-xhs');
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(serializable));
-  }, [conversations, hydrated]);
+  // Hydrate conversations from localStorage
+  useEffect(() => { chat.hydrate(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const activeConversation = conversations.find((conversation) => conversation.id === activeId) ?? null;
-  const platform = activeConversation?.platform ?? 'xhs';
-  const messages = useMemo(() => activeConversation?.messages ?? [], [activeConversation]);
-  const summaries: ConversationSummary[] = useMemo(
-    () => conversations.map(({ id, title, platform: conversationPlatform }) => ({ id, title, platform: conversationPlatform })),
-    [conversations],
-  );
+  // Persist conversations to localStorage
+  useEffect(() => { chat.persist(); }, [chat.conversations, chat.hydrated]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Auto-scroll
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages, view]);
+  }, [chat.messages, view]);
 
-  const createConversation = (platformChoice: Platform, title = `${PLATFORM_LABELS[platformChoice]} 新对话`) => {
-    const conversation: Conversation = {
-      id: `conversation-${idCounter.current++}`,
-      title,
-      platform: platformChoice,
-      messages: [],
-    };
-    setConversations((current) => [conversation, ...current]);
-    setActiveId(conversation.id);
-    setView('chat');
-    return conversation;
-  };
+  const summaries: ConversationSummary[] = useMemo(
+    () => chat.conversations.map(({ id, title, platform }) => ({ id, title, platform })),
+    [chat.conversations],
+  );
 
   const openChat = (id: string) => {
-    setActiveId(id);
+    chat.setActiveId(id);
     setDraft('');
     setView('chat');
   };
@@ -128,113 +69,30 @@ export default function Home() {
   };
 
   const startFromPlatform = (actionPlatform: Platform, title: string) => {
-    const conversation = createConversation(actionPlatform, `${title} · 新对话`);
+    const conversation = chat.createConversation(actionPlatform, `${title} · 新对话`);
     setDraft(starterText[actionPlatform]);
-    setActiveId(conversation.id);
-  };
-
-  const appendMessage = (conversationId: string, message: Message) => {
-    setConversations((current) => current.map((conversation) => (
-      conversation.id === conversationId
-        ? { ...conversation, messages: [...conversation.messages, message] }
-        : conversation
-    )));
-  };
-
-  const replacePending = (conversationId: string, pendingId: string, message: Message) => {
-    setConversations((current) => current.map((conversation) => (
-      conversation.id === conversationId
-        ? { ...conversation, messages: [...conversation.messages.filter((item) => item.id !== pendingId), message] }
-        : conversation
-    )));
-  };
-
-  const send = async (text: string) => {
-    if (pending) return;
-    const conversation = activeConversation ?? createConversation(platform);
-    const conversationId = conversation.id;
-    const requestPlatform = conversation.platform;
-    const history = conversation.messages.filter((message) => !message.demo && !message.status).slice(-10).map((message) => ({
-      role: message.role === 'ai' ? 'assistant' as const : 'user' as const,
-      content: message.text,
-    }));
-
-    setDraft('');
+    chat.setActiveId(conversation.id);
     setView('chat');
-    setPending(true);
-    const controller = new AbortController();
-    abortRef.current = controller;
-    const userMessage: Message = { id: `message-${idCounter.current++}`, role: 'user', text };
-    const pendingMessage: Message = { id: `message-${idCounter.current++}`, role: 'ai', text: '', status: 'pending' };
-    appendMessage(conversationId, userMessage);
-    appendMessage(conversationId, pendingMessage);
-    setConversations((current) => current.map((item) => (
-      item.id === conversationId && item.title.endsWith('新对话')
-        ? { ...item, title: titleFromMessage(text, requestPlatform) }
-        : item
-    )));
-
-    try {
-      const response = await sendChat(requestPlatform, text, history, controller.signal);
-      replacePending(conversationId, pendingMessage.id, { id: `message-${idCounter.current++}`, role: 'ai', text: response.message, card: response.result ?? undefined, questions: response.questions ?? undefined, warnings: response.warnings ?? undefined });
-      if (response.conversation_title) {
-        setConversations((current) => current.map((item) => (
-          item.id === conversationId ? { ...item, title: response.conversation_title! } : item
-        )));
-      }
-    } catch (error) {
-      const errorText = error instanceof Error ? error.message : '生成失败，请稍后重试';
-      replacePending(conversationId, pendingMessage.id, { id: `message-${idCounter.current++}`, role: 'ai', text: errorText, status: 'error' });
-    } finally {
-      setPending(false);
-      abortRef.current = null;
-    }
-  };
-
-  const stop = () => {
-    abortRef.current?.abort();
-  };
-
-  const regenerate = () => {
-    if (!activeConversation || pending) return;
-    const msgs = activeConversation.messages;
-    let lastUserText = '';
-    for (let i = msgs.length - 1; i >= 0; i--) {
-      if (msgs[i].role === 'user' && !msgs[i].demo) {
-        lastUserText = msgs[i].text;
-        break;
-      }
-    }
-    if (!lastUserText) return;
-    setConversations((current) => current.map((conv) => {
-      if (conv.id !== activeConversation.id) return conv;
-      const filtered = [...conv.messages];
-      while (filtered.length > 0 && filtered[filtered.length - 1].role === 'ai' && !filtered[filtered.length - 1].demo) {
-        filtered.pop();
-      }
-      return { ...conv, messages: filtered };
-    }));
-    setTimeout(() => send(lastUserText), 50);
   };
 
   return (
     <div className="app-shell">
-      <Sidebar activeId={activeId} conversations={summaries} mobileOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} onNew={newChat} onSelect={openChat} />
+      <Sidebar activeId={chat.activeId} conversations={summaries} mobileOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} onNew={newChat} onSelect={openChat} onProfileOpen={() => setProfileOpen(true)} onWorkspaceOpen={() => { setWorkspaceAssetId(null); setWorkspaceOpen(true); }} profile={profile} />
       <main className="main-shell">
         <header className="topbar">
           <div className="topbar-inner">
             <button aria-label="打开导航" className="icon-button mobile-menu" onClick={() => setMobileNavOpen(true)}><BrandMark s={18} /></button>
-            {view === 'chat' && activeConversation ? (
+            {view === 'chat' && chat.activeConversation ? (
               <>
-                <span className={`platform-pill ${platform}`}>
-                  {platform === 'xhs' && <XhsMark />}
-                  {platform === 'dy' && <DyMark />}
-                  {platform === 'amazon' && <AmazonMark />}
-                  {PLATFORM_LABELS[platform]}
+                <span className={`platform-pill ${chat.platform}`}>
+                  {chat.platform === 'xhs' && <XhsMark />}
+                  {chat.platform === 'dy' && <DyMark />}
+                  {chat.platform === 'amazon' && <AmazonMark />}
+                  {PLATFORM_LABELS[chat.platform]}
                 </span>
-                <span className="topbar-title">{activeConversation.title}</span>
-                <button aria-label="查看历史" className="icon-button optional"><IconHistory /></button>
-                <button aria-label="分享对话" className="icon-button optional"><IconShare /></button>
+                <span className="topbar-title">{chat.activeConversation.title}</span>
+                {chat.activeProductId && <span className="active-product-chip">{products.find((item) => item.id === chat.activeProductId)?.name ?? '商品事实'}</span>}
+                <button aria-label="内容工作台" className="icon-button optional workspace-trigger" onClick={() => { setWorkspaceAssetId(null); setWorkspaceOpen(true); }} title="内容工作台">OS</button>
                 <button aria-label="品牌档案" className="icon-button optional" onClick={() => setProfileOpen(true)} title="品牌档案">📋</button>
               </>
             ) : <span className="topbar-title">开始一段新对话</span>}
@@ -245,28 +103,34 @@ export default function Home() {
           </div>
         </header>
 
-        {view === 'chat' && activeConversation ? (
+        {view === 'chat' && chat.activeConversation ? (
           <div className="chat-scroll dot-grid" ref={scrollRef}>
             <div className="messages">
-              {messages.length === 0 && <div className="empty-chat">这是一个新对话。告诉我商品信息、平台和你想要的内容类型。</div>}
-              {messages.map((message, index) => {
-                const isLastAI = message.role === 'ai' && !message.status && !message.demo && (index === messages.length - 1 || messages.slice(index + 1).every((m) => m.role === 'user' || m.demo));
+              {chat.messages.length === 0 && <div className="empty-chat">这是一个新对话。告诉我商品信息、平台和你想要的内容类型。</div>}
+              {chat.messages.map((message, index) => {
+                const isLastAI = message.role === 'ai' && !message.status && !message.demo && (index === chat.messages.length - 1 || chat.messages.slice(index + 1).every((m) => m.role === 'user' || m.demo));
                 return (
                   <ChatBubble
                     key={message.id}
                     msg={message}
-                    onOptionSelect={message.questions ? (text) => send(text) : undefined}
-                    onRegenerate={isLastAI ? regenerate : undefined}
+                    brandName={profile?.brand_name}
+                    onOptionSelect={message.questions ? (text) => chat.send(text) : undefined}
+                    onRegenerate={isLastAI ? chat.regenerate : undefined}
+                    onEditAsset={(assetId) => { setWorkspaceAssetId(assetId); setWorkspaceOpen(true); }}
                   />
                 );
               })}
             </div>
           </div>
-        ) : <WelcomeScreen onSelect={startFromPlatform} />}
+        ) : <WelcomeScreen onSelect={startFromPlatform} profile={profile} />}
 
-        {view === 'chat' && activeConversation && <InputBar onSend={send} onTextChange={setDraft} pending={pending} text={draft} onStop={stop} />}
+        {view === 'chat' && chat.activeConversation && <InputBar onSend={(text) => { chat.send(text); setDraft(''); }} onTextChange={setDraft} pending={chat.pending} text={draft} onStop={chat.stop} />}
       </main>
-      <ProfilePanel open={profileOpen} onClose={() => setProfileOpen(false)} />
+      <ProfilePanel open={profileOpen} onClose={() => setProfileOpen(false)} onSaved={setProfile} />
+      <WorkspacePanel open={workspaceOpen} onClose={() => { setWorkspaceOpen(false); listProducts().then(setProducts).catch(() => undefined); }} activeProductId={chat.activeProductId} onActiveProductChange={(productId) => {
+        setDefaultProductId(productId);
+        chat.setActiveProduct(productId);
+      }} targetAssetId={workspaceAssetId} />
     </div>
   );
 }
