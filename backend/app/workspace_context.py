@@ -5,6 +5,7 @@ from app.schemas import Platform
 from app.workspace import (
     KnowledgeSource,
     Product,
+    get_current_version,
     list_content_assets,
     list_knowledge_sources,
     list_performance,
@@ -88,3 +89,37 @@ def build_performance_prompt(product_id: str | None, platform: Platform) -> str:
         for rate, _, name, record in rows[:5]
     ]
     return "【历史发布效果】\n参考历史高表现内容的表达策略，但不要编造原因或承诺相同效果。\n" + "\n".join(lines)
+
+
+def build_content_history_prompt(product_id: str | None, platform: Platform) -> str:
+    """Inject existing content assets (latest versions) as reference context."""
+    if not product_id:
+        return ""
+    assets = [
+        asset for asset in list_content_assets()
+        if asset.product_id == product_id and asset.platform == platform.value
+    ]
+    if not assets:
+        return ""
+
+    excerpts = []
+    for asset in assets[:3]:  # Max 3 assets to avoid token bloat
+        version = get_current_version(asset.id)
+        if not version:
+            continue
+        content = version.content
+        title = content.get("title", "") if isinstance(content, dict) else ""
+        body = content.get("body", "") if isinstance(content, dict) else ""
+        if not title and not body:
+            continue
+        excerpts.append(f"- [{asset.name}] v{version.version}：\n  标题：{title[:80]}\n  正文摘要：{body[:200]}")
+
+    if not excerpts:
+        return ""
+
+    return (
+        "【已有内容资产】\n"
+        "以下是该商品在该平台已有的内容版本（可能经过人工编辑和质量优化）。\n"
+        "请参考其表达风格和卖点角度，但不要照抄。如果是同类型内容，保持风格一致性。\n"
+        + "\n".join(excerpts)
+    )
