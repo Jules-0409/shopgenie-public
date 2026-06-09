@@ -12,6 +12,7 @@ from app.prompts import build_system_prompt
 from app.schemas import ChatRequest, ChatResponse, ContentSection, GeneratedContent, Usage
 from app.workspace import Product
 from app.workspace_context import build_knowledge_prompt, build_performance_prompt, build_product_prompt, build_content_history_prompt, retrieve_knowledge
+from app.competitive_analysis import search_competitors, build_competitive_context
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,16 @@ class DeepSeekClient:
         content_history_prompt = build_content_history_prompt(request.product_id, request.platform)
         if content_history_prompt:
             system_prompt = f"{system_prompt}\n\n{content_history_prompt}"
+        # Competitive analysis: search for similar content patterns
+        category = self._product.category if self._product else self._extract_category(request.message)
+        if category:
+            try:
+                competitors = await search_competitors(category, request.platform)
+                competitive_context = build_competitive_context(category, request.platform, competitors)
+                if competitive_context:
+                    system_prompt = f"{system_prompt}\n\n{competitive_context}"
+            except Exception as exc:
+                logger.warning("Competitive analysis failed: %s", exc)
         payload = {
             "model": self.settings.deepseek_model,
             "thinking": {"type": "disabled"},
@@ -173,6 +184,30 @@ class DeepSeekClient:
                 return questions[:5]
         return None
 
+    @staticmethod
+    def _extract_category(message: str) -> str | None:
+        """Extract product category from user message using simple heuristics."""
+        # Common category keywords
+        categories = [
+            "面膜", "护肤品", "化妆品", "口红", "精华", "防晒", "洗面奶",
+            "卫生巾", "内衣", "衣服", "鞋", "包", "手表", "首饰",
+            "食品", "零食", "饮料", "咖啡", "茶",
+            "手机", "耳机", "充电器", "数据线", "键盘", "鼠标",
+            "保温杯", "水杯", "厨具", "家居", "收纳",
+            "母婴", "玩具", "文具", "宠物",
+            "skincare", "makeup", "electronics", "food", "fashion",
+        ]
+        for cat in categories:
+            if cat in message.lower():
+                return cat
+        # Fallback: try to extract product name from message
+        # Look for patterns like "产品是XXX" or "写个XXX的"
+        import re
+        match = re.search(r"(?:产品是|写个?|做一个?|帮我写)(.{2,8}?)(?:的|笔记|脚本|文案|listing)", message)
+        if match:
+            return match.group(1).strip()
+        return None
+
     async def _post(self, payload: dict[str, Any]) -> dict[str, Any]:
         headers = {"Authorization": f"Bearer {self.settings.deepseek_api_key}"}
         if self._client is not None:
@@ -201,6 +236,16 @@ class DeepSeekClient:
         content_history_prompt = build_content_history_prompt(request.product_id, request.platform)
         if content_history_prompt:
             system_prompt = f"{system_prompt}\n\n{content_history_prompt}"
+        # Competitive analysis
+        category = self._product.category if self._product else self._extract_category(request.message)
+        if category:
+            try:
+                competitors = await search_competitors(category, request.platform)
+                competitive_context = build_competitive_context(category, request.platform, competitors)
+                if competitive_context:
+                    system_prompt = f"{system_prompt}\n\n{competitive_context}"
+            except Exception as exc:
+                logger.warning("Competitive analysis failed: %s", exc)
 
         payload = {
             "model": self.settings.deepseek_model,
