@@ -219,9 +219,10 @@ export function useChat(defaultProductId: string | null) {
     return conversation;
   }, [defaultProductId]);
 
-  const send = useCallback(async (text: string, imageUrl?: string) => {
+  const send = useCallback(async (text: string, imageUrl?: string, forcePlatform?: Platform) => {
     if (pending) return;
-    const conversation = activeConversation ?? createConversation(platform);
+    const usePlatform = forcePlatform ?? platform;
+    const conversation = activeConversation ?? createConversation(usePlatform);
     const history = conversation.messages.filter((m) => !m.demo && !m.status).slice(-10).map((m) => ({
       role: m.role === 'ai' ? 'assistant' as const : 'user' as const,
       content: historyContent(m),
