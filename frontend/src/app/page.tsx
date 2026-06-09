@@ -16,6 +16,7 @@ const starterText: Record<Platform, string> = {
   xhs: '我想写一篇小红书种草笔记，产品是：',
   dy: '我想写一个抖音短视频脚本，产品是：',
   amazon: 'I want to create an Amazon listing. Product facts: ',
+  cs: '我需要客服话术，商品是：',
 };
 
 export default function Home() {
@@ -88,6 +89,7 @@ export default function Home() {
                   {chat.platform === 'xhs' && <XhsMark />}
                   {chat.platform === 'dy' && <DyMark />}
                   {chat.platform === 'amazon' && <AmazonMark />}
+                  {chat.platform === 'cs' && <span style={{ fontSize: 14 }}>💬</span>}
                   {PLATFORM_LABELS[chat.platform]}
                 </span>
                 <span className="topbar-title">{chat.activeConversation.title}</span>

@@ -110,10 +110,26 @@ def validate_amazon(content: GeneratedContent) -> ValidationResult:
     return result
 
 
+def validate_cs(content: GeneratedContent) -> ValidationResult:
+    """Validate customer service templates."""
+    result = ValidationResult()
+
+    if not _is_primarily_chinese(content.title):
+        result.errors.append("客服话术标题必须是中文")
+        result.valid = False
+
+    if not _is_primarily_chinese(content.body):
+        result.errors.append("客服话术正文必须是中文")
+        result.valid = False
+
+    return result
+
+
 VALIDATORS = {
     Platform.XHS: validate_xhs,
     Platform.DOUYIN: validate_douyin,
     Platform.AMAZON: validate_amazon,
+    Platform.CS: validate_cs,
 }
 
 

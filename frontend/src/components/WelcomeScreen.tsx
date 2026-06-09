@@ -3,32 +3,43 @@
 import { AmazonMark, DyMark, XhsMark } from './Icons';
 import type { UserProfile } from '@/lib/api';
 import type { Platform } from '@/lib/platforms';
+import { CONTENT_PLATFORMS, PLATFORM_LABELS } from '@/lib/platforms';
 
 const PLATFORMS = [
   {
-    platform: 'xhs',
+    platform: 'xhs' as Platform,
     label: '小红书种草笔记',
     description: '真实分享感，包含标题、正文与话题标签',
     badge: '生活方式内容',
   },
   {
-    platform: 'dy',
+    platform: 'dy' as Platform,
     label: '抖音短视频脚本',
     description: '可直接拍摄，包含 Hook、分镜口播与转化引导',
     badge: '15–60 秒脚本',
   },
   {
-    platform: 'amazon',
+    platform: 'amazon' as Platform,
     label: 'Amazon Listing',
     description: '英文商品详情，包含标题、Bullet Points 与描述',
     badge: '跨境电商',
   },
 ] satisfies Array<{ platform: Platform; label: string; description: string; badge: string }>;
 
+const SCENARIOS = [
+  {
+    platform: 'cs' as Platform,
+    label: '客服话术',
+    description: '售前咨询 + 售后处理的标准化回复模板',
+    icon: '💬',
+  },
+];
+
 const PlatformIcon = ({ platform }: { platform: Platform }) => {
   if (platform === 'xhs') return <XhsMark s={18} />;
   if (platform === 'dy') return <DyMark s={18} />;
-  return <AmazonMark s={18} />;
+  if (platform === 'amazon') return <AmazonMark s={18} />;
+  return <span style={{ fontSize: 18 }}>💬</span>;
 };
 
 const Preview = ({ platform, brandName }: { platform: Platform; brandName: string }) => {
@@ -88,6 +99,21 @@ export default function WelcomeScreen({ onSelect, profile, onProfileOpen }: { on
               <div className="preview-cta">使用这个平台 <span>→</span></div>
             </button>
           ))}
+        </div>
+        <div className="scenario-section">
+          <div className="scenario-label">更多场景</div>
+          <div className="scenario-grid">
+            {SCENARIOS.map((item) => (
+              <button className="scenario-card" key={item.platform} onClick={() => onSelect(item.platform, item.label)}>
+                <span className="scenario-icon">{item.icon}</span>
+                <div className="scenario-copy">
+                  <strong>{item.label}</strong>
+                  <span>{item.description}</span>
+                </div>
+                <span className="scenario-arrow">→</span>
+              </button>
+            ))}
+          </div>
         </div>
         <div className={`memory-chip${!memoryItems.length && onProfileOpen ? ' clickable' : ''}`} onClick={!memoryItems.length && onProfileOpen ? onProfileOpen : undefined}>{memoryItems.length > 0 ? `● 已记住：${memoryItems.join(' · ')}` : '○ 设置品牌档案后，生成内容会更贴合你的风格'}</div>
       </div>
