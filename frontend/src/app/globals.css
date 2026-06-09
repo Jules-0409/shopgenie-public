@@ -160,6 +160,19 @@ button { color: inherit; }
 .confirm-cancel { padding: 8px 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); font-size: 13px; cursor: pointer; font-family: 'Noto Sans SC', sans-serif; }
 .confirm-delete { padding: 8px 18px; border: none; border-radius: 8px; background: #ef4444; color: white; font-size: 13px; cursor: pointer; font-family: 'Noto Sans SC', sans-serif; }
 .confirm-delete:hover { background: #dc2626; }
+/* Version Diff */
+.version-diff { margin-top: 6px; }
+.version-diff-toggle { border: none; background: none; color: var(--xhs); font-size: 11.5px; cursor: pointer; padding: 0; font-family: 'Noto Sans SC', sans-serif; }
+.version-diff-toggle:hover { text-decoration: underline; }
+.version-diff-content { margin-top: 8px; padding: 10px; border-radius: 8px; background: #faf8f4; border: 1px solid var(--line-soft); }
+.diff-section { margin-bottom: 8px; }
+.diff-section:last-child { margin-bottom: 0; }
+.diff-label { font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+.diff-line { font-size: 12.5px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
+.diff-body { max-height: 200px; overflow-y: auto; }
+.diff-added { background: #dcfce7; color: #166534; padding: 0 2px; border-radius: 2px; }
+.diff-removed { background: #fee2e2; color: #991b1b; padding: 0 2px; border-radius: 2px; text-decoration: line-through; }
+.version-diff-empty { font-size: 11.5px; color: var(--faint); margin-top: 4px; }
 .workspace-overlay { position: fixed; inset: 0; z-index: 110; display: flex; justify-content: flex-end; background: rgba(25,24,22,.34); backdrop-filter: blur(3px); }
 .workspace-panel { width: min(1040px, 94vw); height: 100%; display: flex; flex-direction: column; overflow: hidden; border-left: 1px solid var(--line); background: var(--canvas); box-shadow: -20px 0 70px rgba(30,25,20,.16); }
 .workspace-header { display: flex; align-items: flex-start; gap: 20px; padding: 25px 28px 20px; border-bottom: 1px solid var(--line); background: var(--surface); }
