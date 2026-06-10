@@ -58,6 +58,29 @@ V1.5 已具备三平台生成、商品事实库、内容版本、质量闭环、
 
 ## 执行日志
 
+### 2026-06-10（续4：解析容错 + Prompt 结构强化）
+- DeepSeek 解析全面容错，不再因模型输出格式问题炸用户：
+  - 非 JSON 内容降级为闲聊（返回前 2000 字），不再 `raise DeepSeekError`。
+  - 未知 `kind`：优先用 title/body 字段拼装预览卡片（仍走平台强契约校验），拼装失败再降级为闲聊。
+  - `_try_parse_json` 增加多策略解析链：直接解析 → 去尾逗号（`,]`/`,}`）→ 单引号转双引号 → 组合修复；对截断 JSON 的子串扫描同样套用全部策略。
+  - 记录原始 content preview 日志（前 500 字）便于排查模型输出问题。
+- Prompt 结构强化（`prompts.py`）：
+  - 小红书：明确 sections 数组用于正文分段（最多 3 段，label 小标题 + content 正文，可为空）。
+  - Amazon：加"语言红线"——title/body/tags/sections 全英文、message 中文，违反会被后端拦截；Bullet Points 明确用 sections 数组（≥5 条），附 sections 示例格式。
+- 流式链路自动受益：`stream.py` 复用 `_parse_content`，同样获得降级容错（非 JSON/未知 kind 不再中断 SSE）。
+- 验证：后端 71 测试通过。
+
+### 2026-06-10（续3：前端成熟度修复轮，真实万相调用实测）
+- 统一错误提示：新增模块级事件总线 `lib/toast.ts` + `Toaster` 组件（`role=status aria-live=polite`、可手动关闭），替换全部 `alert()`/内联 error/静默吞错；移除 StudioView/ProfilePanel 的固定错误条。
+- 新增应用级错误边界 `app/error.tsx`（重试 reset + 刷新页面），白屏崩溃可恢复。
+- Studio 任务可恢复 + 可取消：`pendingTask`（task_id + kind）持久化进 `conversation.studio`，付费万相任务提交后即落盘；`pollUntilDone` 支持 `isCancelled` 回调，每 2s tick 检查；"停止等待"取消轮询但任务仍在云端执行；刷新/切换会话后显示"继续等待/放弃"恢复横幅。**真实万相调用全链路实测**：提交→取消→刷新→恢复横幅→继续等待→结果落地（adjHistory 正确追加、pendingTask 清空）。
+- 会话自动命名：成品 `result.title` 替换截断式临时标题（24 字截断 + `named` 标记，已命名会话不被覆盖）。
+- 弹层可访问性：新增 `useEscClose` hook，ProfilePanel/WorkspacePanel 支持 Esc 关闭（浏览器实测）。
+- 触屏删除常显：`@media (hover: none)` 下会话删除按钮始终可见。
+- 草稿持久化：聊天输入草稿与 Studio 描述草稿写入 sessionStorage，刷新不丢（规避 set-state-in-effect 用 `Promise.resolve().then`）。
+- `repairStudio`：hydrate 时复位所有 `tweaking` 标记，避免刷新后卡在"调整中"。
+- 验证：后端 71 测试通过；前端 vitest 23 通过；tsc clean；lint 0 error / 15 warnings；build 通过；桌面 + 390×844 浏览器 E2E 走查通过（真实生成黑色保温杯三视图并展示）。
+
 ### 2026-06-10（续2：P0/P1 验证修复轮，全程实测验证）
 - 修复 `/shopgenie/api/studio/*` 404：本版 Next.js rewrites 的 source 会自动加 basePath 前缀，`next.config.ts` 中 source 改为 `/api/:path*`；curl 实测 templates/sessions/profile 经 3000 端口全部 200。
 - 平台强契约落地：`enforce_platform_contract` 校验失败→自动矫正一次（带错误清单的第二次 LLM 调用）→仍失败则拦截（result=None、message 含"已拦截"、🚫 warnings），非流式与流式链路统一接入；被拦截内容不再保存为资产。
@@ -324,7 +347,7 @@ V1.5 已具备三平台生成、商品事实库、内容版本、质量闭环、
 - [x] ~~[P1][前端] 修复当前 lint error~~（2026-06-10：0 error；15 个低优先级 warnings 待清理）
 - [P1][部署] 统一静态导出、basePath、API 代理和部署路由策略，消除 build 的 rewrites 警告并验证生产路径。
 - [x] ~~[P1][Studio] 场景模板实际使用 `prompt_template`~~（2026-06-10：已接通；前端"模板→请求内容"回归测试仍待补）
-- [P1][Studio] 持久化 Studio 的阶段、参考图、调整历史和场景结果，验证刷新及切换会话不丢状态（已有 studio 字段持久化，待浏览器验收）。
+- [x] ~~[P1][Studio] 持久化 Studio 的阶段、参考图、调整历史和场景结果，验证刷新及切换会话不丢状态。~~（2026-06-10 续3：pendingTask 持久化 + 真实万相调用实测，提交→取消→刷新→恢复→结果落地）
 - [x] ~~[P1][Studio] 统一前后端图片大小限制，按 base64 后实际长度校验并给出明确错误。~~（2026-06-10：InputBar/StudioView 与后端对齐 5M 字符）
 - [x] ~~[P1][Studio] 拒绝空描述且无图片的生图请求。~~（2026-06-10：后端 422 + 测试）
 - [x] ~~[P1][Studio] 统一任务轮询契约和总超时；上游失败或后端非 2xx 时前端立即停止。~~（2026-06-10：后端单次查询，前端控制循环与超时）
