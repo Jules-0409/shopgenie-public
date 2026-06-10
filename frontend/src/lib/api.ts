@@ -29,6 +29,15 @@ interface ChatApiResponse {
   };
 }
 
+export interface ReviewInsights {
+  loved_points: string[];
+  pain_points: string[];
+  avoid_phrases: string[];
+  voice_quotes: string[];
+  summary: string;
+  review_count: number;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -38,6 +47,7 @@ export interface Product {
   facts: string[];
   prohibited_claims: string[];
   notes: string;
+  review_insights?: ReviewInsights | null;
   created_at: string;
   updated_at: string;
 }
@@ -249,6 +259,10 @@ export const listProducts = () => requestJson<Product[]>('/shopgenie/api/product
 export const createProduct = (product: Omit<Product, 'id' | 'created_at' | 'updated_at'>) => requestJson<Product>('/shopgenie/api/products', {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(product),
 });
+export const analyzeReviews = (productId: string, reviews: string) => requestJson<Product>(`/shopgenie/api/products/${productId}/reviews/analyze`, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reviews }),
+});
+export const clearReviews = (productId: string) => requestJson<Product>(`/shopgenie/api/products/${productId}/reviews`, { method: 'DELETE' });
 export const listContentAssets = () => requestJson<ContentAsset[]>('/shopgenie/api/content');
 export const listContentVersions = (assetId: string) => requestJson<ContentVersion[]>(`/shopgenie/api/content/${assetId}/versions`);
 export const addContentVersion = (assetId: string, content: GeneratedContent, changeNote: string) => requestJson<ContentVersion>(`/shopgenie/api/content/${assetId}/versions`, {

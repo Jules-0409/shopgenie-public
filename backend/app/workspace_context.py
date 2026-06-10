@@ -27,7 +27,35 @@ def build_product_prompt(product: Product | None) -> str:
         parts.append(f"禁止声明：{'；'.join(product.prohibited_claims)}")
     if product.notes:
         parts.append(f"备注：{product.notes}")
-    return "【当前商品事实库】\n" + "\n".join(parts)
+    prompt = "【当前商品事实库】\n" + "\n".join(parts)
+    review_block = build_review_prompt(product)
+    if review_block:
+        prompt = f"{prompt}\n\n{review_block}"
+    return prompt
+
+
+def build_review_prompt(product: Product | None) -> str:
+    """把评论反哺洞察注入生成上下文，让内容贴合用户真实在乎的点。"""
+    insights = getattr(product, "review_insights", None) if product else None
+    if not insights:
+        return ""
+    lines: list[str] = []
+    loved = insights.get("loved_points") or []
+    pains = insights.get("pain_points") or []
+    avoid = insights.get("avoid_phrases") or []
+    quotes = insights.get("voice_quotes") or []
+    if loved:
+        lines.append(f"用户最认可的点（优先突出）：{'；'.join(loved)}")
+    if pains:
+        lines.append(f"用户高频抱怨/顾虑（主动打消）：{'；'.join(pains)}")
+    if quotes:
+        lines.append(f"可借用的用户原声：{'；'.join(quotes)}")
+    if avoid:
+        lines.append(f"易踩雷表达（尽量回避）：{'；'.join(avoid)}")
+    if not lines:
+        return ""
+    header = "【用户评论洞察】（来自真实评价，用用户语言而非臆想卖点）"
+    return header + "\n" + "\n".join(lines)
 
 
 def learn_product_from_message(product: Product, message: str) -> Product:

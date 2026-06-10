@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import {
   addContentVersion,
+  analyzeReviews,
+  clearReviews,
   createKnowledge,
   createCustomTemplate,
   createPerformance,
@@ -30,6 +32,7 @@ import {
   type PerformanceInsights,
   type Product,
 } from '@/lib/api';
+import { toast } from '@/lib/toast';
 import { PLATFORM_LABELS, type Platform } from '@/lib/platforms';
 import { useEscClose } from '@/hooks/useEscClose';
 import VersionDiff from './VersionDiff';
@@ -159,7 +162,84 @@ function ProductsTab({ products, activeProductId, onSelect, onCreated }: {
         <label>已确认事实<textarea value={facts} onChange={(event) => setFacts(event.target.value)} placeholder="容量 500ml、杯身 230g" /></label>
         <label>禁止声明<textarea value={prohibited} onChange={(event) => setProhibited(event.target.value)} placeholder="永不漏水、保温 48 小时" /></label>
         <button className="workspace-primary" disabled={!name.trim()} onClick={create}>保存并用于生成</button>
+        <ReviewMiningPanel product={products.find((item) => item.id === activeProductId) ?? null} onChanged={onCreated} />
       </div>
+    </div>
+  );
+}
+
+function ReviewMiningPanel({ product, onChanged }: { product: Product | null; onChanged: () => Promise<void> }) {
+  const [reviews, setReviews] = useState('');
+  const [busy, setBusy] = useState(false);
+  const insights = product?.review_insights ?? null;
+
+  if (!product) {
+    return (
+      <div className="review-mining">
+        <div className="workspace-section-title">💬 评论反哺</div>
+        <p className="review-hint">选中左侧一个商品后，可粘贴买家真实评价，AI 会提炼用户真实在乎的卖点与顾虑，自动反哺到该商品的内容生成。</p>
+      </div>
+    );
+  }
+
+  const analyze = async () => {
+    if (!reviews.trim() || busy) return;
+    setBusy(true);
+    try {
+      await analyzeReviews(product.id, reviews.trim());
+      setReviews('');
+      toast('评论分析完成，洞察已注入该商品生成上下文', 'success');
+      await onChanged();
+    } catch (error) {
+      toast(error instanceof Error ? error.message : '评论分析失败，请稍后重试');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const clear = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await clearReviews(product.id);
+      toast('已清除评论洞察', 'info');
+      await onChanged();
+    } catch (error) {
+      toast(error instanceof Error ? error.message : '清除失败');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="review-mining">
+      <div className="workspace-section-title">💬 评论反哺 · {product.name}</div>
+      <label>买家评价（每行一条，粘贴即可）
+        <textarea value={reviews} onChange={(event) => setReviews(event.target.value)} placeholder={'回购第三次了，敷完第二天上妆不卡粉\n瓶口有点容易洒\n学生党也买得起'} rows={5} />
+      </label>
+      <button className="workspace-primary" disabled={!reviews.trim() || busy} onClick={analyze}>{busy ? '分析中…' : '分析并反哺生成'}</button>
+      {insights && (
+        <div className="review-insights">
+          <div className="review-insights-head">
+            <span>基于 {insights.review_count} 条评价</span>
+            <button className="review-clear" disabled={busy} onClick={clear}>清除</button>
+          </div>
+          {insights.summary && <p className="review-summary">{insights.summary}</p>}
+          {insights.loved_points.length > 0 && <ReviewChips title="用户最认可" tone="loved" items={insights.loved_points} />}
+          {insights.pain_points.length > 0 && <ReviewChips title="高频顾虑" tone="pain" items={insights.pain_points} />}
+          {insights.voice_quotes.length > 0 && <ReviewChips title="可借用原声" tone="quote" items={insights.voice_quotes} />}
+          {insights.avoid_phrases.length > 0 && <ReviewChips title="易踩雷表达" tone="avoid" items={insights.avoid_phrases} />}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReviewChips({ title, tone, items }: { title: string; tone: string; items: string[] }) {
+  return (
+    <div className="review-chip-group">
+      <span className="review-chip-title">{title}</span>
+      <div className="review-chip-row">{items.map((item, i) => <span className={`review-chip review-chip-${tone}`} key={i}>{item}</span>)}</div>
     </div>
   );
 }

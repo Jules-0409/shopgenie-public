@@ -30,6 +30,8 @@ class Product:
     facts: list[str] = field(default_factory=list)
     prohibited_claims: list[str] = field(default_factory=list)
     notes: str = ""
+    # 评论反哺：从真实用户评价中提炼的结构化洞察（None 表示尚未分析）
+    review_insights: dict | None = None
     created_at: str = field(default_factory=_now)
     updated_at: str = field(default_factory=_now)
 

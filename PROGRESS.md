@@ -58,6 +58,18 @@ V1.5 已具备三平台生成、商品事实库、内容版本、质量闭环、
 
 ## 执行日志
 
+### 2026-06-10（续5：评论反哺 Review Mining — 运营增长闭环首个增量）
+- 新功能：从真实买家评价提炼结构化洞察，反哺内容生成（把"模型臆想卖点"升级为"用户真实在乎的卖点"）。
+- 后端：
+  - `review_mining.py`：`analyze_reviews()` 调 DeepSeek 提炼 `loved_points/pain_points/avoid_phrases/voice_quotes/summary`，`normalize_insights()` 去重去空限长；评论上限 20000 字符，空输入抛 422。
+  - `DeepSeekClient.complete_json()`：通用 JSON 补全方法，供非内容生成的结构化抽取复用。
+  - `Product.review_insights` 字段（dict|None，向后兼容旧记录）。
+  - `build_review_prompt()` 注入 `build_product_prompt`，聊天与流式两条管线自动生效；普通更新商品不抹掉洞察（ProductInput 不含该字段）。
+  - 路由：`POST /api/products/{id}/reviews/analyze`（分析+存储）、`DELETE /api/products/{id}/reviews`（清除）。
+- 前端：工作台「商品库」Tab 选中商品后出现「💬 评论反哺」面板——粘贴评价→一键分析→色彩分组展示洞察（认可/顾虑/原声/踩雷）+ 一句话总结 + 清除；错误走统一 toast。
+- 测试：`test_review_mining.py` 6 个（规整去重、prompt 注入、analyze 规整、空输入 422、API 全流程含"更新不抹洞察"+404）。后端 77 测试通过。
+- 验证：tsc clean；lint 0 error；前端 vitest 23 通过；浏览器真实 DeepSeek 实测——建商品→粘贴 6 条面膜评价→分析返回结构化洞察→刷新后面板正确渲染（截图存档）。
+
 ### 2026-06-10（续4：解析容错 + Prompt 结构强化）
 - DeepSeek 解析全面容错，不再因模型输出格式问题炸用户：
   - 非 JSON 内容降级为闲聊（返回前 2000 字），不再 `raise DeepSeekError`。

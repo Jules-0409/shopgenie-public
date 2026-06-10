@@ -46,6 +46,7 @@ from app.workspace import (
     build_performance_insights,
 )
 from app.workspace_context import learn_product_from_message
+from app.review_mining import analyze_reviews
 
 logging.basicConfig(
     level=logging.INFO,
@@ -198,6 +199,38 @@ async def api_update_product(product_id: str, req: ProductInput) -> Product:
 @app.delete("/api/products/{product_id}")
 async def api_delete_product(product_id: str) -> dict[str, bool]:
     return {"deleted": await run_in_threadpool(delete_product, product_id)}
+
+
+class ReviewAnalyzeInput(BaseModel):
+    reviews: str = Field(min_length=1, max_length=20_000)
+
+
+@app.post("/api/products/{product_id}/reviews/analyze", response_model=Product)
+async def api_analyze_reviews(
+    product_id: str, req: ReviewAnalyzeInput, settings: Settings = Depends(get_settings)
+) -> Product:
+    """评论反哺：分析买家评价，提炼洞察并存进商品事实库。"""
+    product = await run_in_threadpool(get_product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="商品不存在")
+    try:
+        insights = await analyze_reviews(req.reviews, settings, product=product)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except DeepSeekError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    product.review_insights = insights
+    return await run_in_threadpool(save_product, product)
+
+
+@app.delete("/api/products/{product_id}/reviews", response_model=Product)
+async def api_clear_reviews(product_id: str) -> Product:
+    """清除某商品的评论洞察。"""
+    product = await run_in_threadpool(get_product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="商品不存在")
+    product.review_insights = None
+    return await run_in_threadpool(save_product, product)
 
 
 @app.get("/api/content", response_model=list[ContentAsset])

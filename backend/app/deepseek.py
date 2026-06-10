@@ -318,6 +318,27 @@ class DeepSeekClient:
         ) as client:
             return await self._request(client, payload, headers)
 
+    async def complete_json(self, system_prompt: str, user_prompt: str) -> dict:
+        """通用 JSON 补全：用于非内容生成的结构化抽取（如评论反哺）。解析失败抛 DeepSeekError。"""
+        payload = {
+            "model": self.settings.deepseek_model,
+            "thinking": {"type": "disabled"},
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+        response_data = await self._post(payload)
+        try:
+            content = response_data["choices"][0]["message"]["content"].strip()
+        except (KeyError, IndexError, AttributeError) as exc:
+            raise DeepSeekError("DeepSeek 返回了无法解析的响应") from exc
+        parsed = self._try_parse_json(content)
+        if parsed is None:
+            raise DeepSeekError("DeepSeek 返回了无法解析的结构化内容")
+        return parsed
+
     async def chat_stream(self, request: ChatRequest, extra_context: str = ""):
         """Stream tokens from DeepSeek API. Yields string tokens."""
         system_prompt = build_system_prompt(request.platform)

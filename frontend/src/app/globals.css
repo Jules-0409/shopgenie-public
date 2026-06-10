@@ -967,3 +967,20 @@ button { color: inherit; }
 .studio-task-bar button:hover { background: rgba(255,255,255,.12); }
 .studio-task-spinner { width: 12px; height: 12px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── 评论反哺 Review Mining ── */
+.review-mining { margin-top: 18px; padding-top: 16px; border-top: 1px dashed var(--line); display: flex; flex-direction: column; gap: 10px; }
+.review-hint { margin: 0; font-size: 12px; line-height: 1.7; color: var(--muted); }
+.review-insights { margin-top: 4px; padding: 12px; border: 1px solid var(--line-soft); border-radius: 12px; background: #faf8f4; display: flex; flex-direction: column; gap: 10px; }
+.review-insights-head { display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: var(--faint); font-weight: 600; }
+.review-clear { border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--muted); font-size: 11px; padding: 3px 9px; cursor: pointer; transition: .15s; }
+.review-clear:hover { border-color: var(--xhs); color: var(--xhs); }
+.review-summary { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--ink); font-weight: 500; }
+.review-chip-group { display: flex; flex-direction: column; gap: 5px; }
+.review-chip-title { font-size: 10.5px; font-weight: 700; letter-spacing: .04em; color: var(--faint); text-transform: uppercase; }
+.review-chip-row { display: flex; flex-wrap: wrap; gap: 5px; }
+.review-chip { font-size: 11.5px; line-height: 1.4; padding: 3px 9px; border-radius: 8px; border: 1px solid transparent; }
+.review-chip-loved { background: #eaf3ee; border-color: #cfe4d8; color: #2f5c44; }
+.review-chip-pain { background: #fdf0e8; border-color: #f6d8c4; color: #9a4a1d; }
+.review-chip-quote { background: #f1f0ec; border-color: #e0dad1; color: var(--ink); font-style: italic; }
+.review-chip-avoid { background: #fcebe9; border-color: #f3cfca; color: #a32b22; }
