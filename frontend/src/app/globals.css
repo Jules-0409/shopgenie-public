@@ -1086,3 +1086,27 @@ body::after {
 .variant-save { padding: 6px 14px; border: 1px solid var(--ink); border-radius: 8px; background: var(--ink); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; transition: .15s; }
 .variant-save:hover:not(:disabled) { background: #000; }
 .variant-save:disabled { opacity: .5; cursor: default; }
+
+/* ── 运营台 Hub（首页） ── */
+.ops-hub { margin-top: 40px; }
+.ops-hub-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+.ops-hub-sub { font-size: 12px; color: var(--muted); }
+.ops-hub-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.ops-card { display: flex; align-items: center; gap: 13px; padding: 15px 16px; border: 1px solid var(--line); border-radius: 16px; background: rgba(255,254,250,.94); text-align: left; cursor: pointer; box-shadow: var(--shadow-sm); transition: transform .24s cubic-bezier(.2,.7,.2,1), box-shadow .24s ease, border-color .24s ease; }
+.ops-card:hover { transform: translateY(-3px); border-color: #c8bfb4; box-shadow: 0 20px 44px rgba(52,43,33,.13); }
+.ops-card-icon { font-size: 24px; line-height: 1; }
+.ops-card-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.ops-card-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.ops-card-top strong { font-size: 13.5px; color: var(--ink); }
+.ops-card-stat { font-size: 11.5px; font-weight: 700; color: var(--ink); white-space: nowrap; }
+.ops-card-hint { font-size: 11px; color: var(--faint); line-height: 1.4; }
+.ops-card-arrow { color: var(--faint); font-size: 14px; transition: transform .24s cubic-bezier(.2,.7,.2,1); }
+.ops-card:hover .ops-card-arrow { transform: translateX(4px); color: var(--ink); }
+@media (max-width: 720px) { .ops-hub-grid { grid-template-columns: 1fr; } }
+
+/* ── 上下文：评论洞察提示条（输入框上方） ── */
+.ctx-insight-strip { display: flex; align-items: center; gap: 10px; width: min(100%, 900px); margin: 0 auto; padding: 7px 14px; border: 1px solid #cfe4d8; border-radius: 10px 10px 0 0; border-bottom: none; background: #f3faf6; cursor: pointer; text-align: left; transition: background .15s; }
+.ctx-insight-strip:hover { background: #eaf3ee; }
+.ctx-insight-tag { font-size: 11px; font-weight: 700; color: #2f5c44; white-space: nowrap; }
+.ctx-insight-points { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctx-insight-arrow { font-size: 11px; font-weight: 700; color: #2f5c44; white-space: nowrap; }

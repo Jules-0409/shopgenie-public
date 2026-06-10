@@ -1,9 +1,10 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { AmazonMark, DyMark, XhsMark } from './Icons';
-import type { UserProfile } from '@/lib/api';
+import { getPerformanceInsights, listExperiments, listProducts, type Experiment, type PerformanceInsights, type Product, type UserProfile } from '@/lib/api';
 import type { Platform } from '@/lib/platforms';
-import { CONTENT_PLATFORMS, PLATFORM_LABELS } from '@/lib/platforms';
+import type { WorkspaceTab } from './WorkspacePanel';
 
 const PLATFORMS = [
   {
@@ -78,7 +79,50 @@ const Preview = ({ platform, brandName }: { platform: Platform; brandName: strin
   );
 };
 
-export default function WelcomeScreen({ onSelect, profile, onProfileOpen }: { onSelect: (platform: Platform, title: string) => void; profile: UserProfile | null; onProfileOpen?: () => void }) {
+function OperationsHub({ onOpen }: { onOpen?: (tab: WorkspaceTab) => void }) {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [experiments, setExperiments] = useState<Experiment[]>([]);
+  const [insights, setInsights] = useState<PerformanceInsights | null>(null);
+
+  useEffect(() => {
+    listProducts().then(setProducts).catch(() => undefined);
+    listExperiments().then(setExperiments).catch(() => undefined);
+    getPerformanceInsights().then(setInsights).catch(() => undefined);
+  }, []);
+
+  const analyzed = products.filter((p) => p.review_insights).length;
+  const running = experiments.filter((e) => e.status === 'running').length;
+  const decided = experiments.filter((e) => e.status === 'decided').length;
+
+  const cards: Array<{ tab: WorkspaceTab; icon: string; label: string; stat: string; hint: string }> = [
+    { tab: 'products', icon: '📦', label: '商品库', stat: `${products.length} 个商品`, hint: analyzed > 0 ? `${analyzed} 个已分析评论` : '粘贴买家评价，反哺生成' },
+    { tab: 'experiments', icon: '🧪', label: 'A/B 实验', stat: running + decided > 0 ? `${running} 投放中 · ${decided} 已决出` : '还没有实验', hint: '标题/钩子变体竞速找赢家' },
+    { tab: 'performance', icon: '📈', label: '效果洞察', stat: insights && insights.records > 0 ? `转化率 ${insights.conversion_rate}%` : '暂无数据', hint: insights && insights.records > 0 ? `${insights.records} 次发布回流` : '录入曝光转化，优化下一版' },
+  ];
+
+  return (
+    <div className="ops-hub">
+      <div className="ops-hub-head">
+        <span className="scenario-label">你的运营台</span>
+        <span className="ops-hub-sub">内容只是起点 — 评论反哺、A/B 实验、效果回流让它越用越准</span>
+      </div>
+      <div className="ops-hub-grid">
+        {cards.map((c) => (
+          <button className="ops-card" key={c.tab} onClick={() => onOpen?.(c.tab)}>
+            <span className="ops-card-icon">{c.icon}</span>
+            <div className="ops-card-body">
+              <div className="ops-card-top"><strong>{c.label}</strong><span className="ops-card-stat">{c.stat}</span></div>
+              <span className="ops-card-hint">{c.hint}</span>
+            </div>
+            <span className="ops-card-arrow">→</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function WelcomeScreen({ onSelect, profile, onProfileOpen, onOpenWorkspace }: { onSelect: (platform: Platform, title: string) => void; profile: UserProfile | null; onProfileOpen?: () => void; onOpenWorkspace?: (tab: WorkspaceTab) => void }) {
   const brandName = profile?.brand_name || '你的品牌';
   const memoryItems = profile
     ? [profile.brand_name, profile.category, profile.tone, ...profile.style_preferences].filter(Boolean).slice(0, 4)
@@ -106,6 +150,7 @@ export default function WelcomeScreen({ onSelect, profile, onProfileOpen }: { on
             </button>
           ))}
         </div>
+        <OperationsHub onOpen={onOpenWorkspace} />
         <div className="scenario-section">
           <div className="scenario-label">更多场景</div>
           <div className="scenario-grid">

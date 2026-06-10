@@ -43,7 +43,8 @@ import { PLATFORM_LABELS, type Platform } from '@/lib/platforms';
 import { useEscClose } from '@/hooks/useEscClose';
 import VersionDiff from './VersionDiff';
 
-type Tab = 'products' | 'content' | 'experiments' | 'knowledge' | 'tasks' | 'performance' | 'scene';
+export type WorkspaceTab = 'products' | 'content' | 'experiments' | 'knowledge' | 'tasks' | 'performance' | 'scene';
+type Tab = WorkspaceTab;
 const split = (value: string) => value.split(/[、,，\n]/).map((item) => item.trim()).filter(Boolean);
 
 interface WorkspacePanelProps {
@@ -52,9 +53,10 @@ interface WorkspacePanelProps {
   activeProductId: string | null;
   onActiveProductChange: (productId: string | null) => void;
   targetAssetId: string | null;
+  initialTab?: WorkspaceTab;
 }
 
-export default function WorkspacePanel({ open, onClose, activeProductId, onActiveProductChange, targetAssetId }: WorkspacePanelProps) {
+export default function WorkspacePanel({ open, onClose, activeProductId, onActiveProductChange, targetAssetId, initialTab }: WorkspacePanelProps) {
   const [tab, setTab] = useState<Tab>('products');
   const [products, setProducts] = useState<Product[]>([]);
   const [assets, setAssets] = useState<ContentAsset[]>([]);
@@ -98,9 +100,11 @@ export default function WorkspacePanel({ open, onClose, activeProductId, onActiv
       if (targetAssetId) {
         setTab('content');
         setSelectedAssetId(targetAssetId);
+      } else if (initialTab) {
+        setTab(initialTab);
       }
     });
-  }, [open, targetAssetId]);
+  }, [open, targetAssetId, initialTab]);
 
   useEffect(() => {
     if (!selectedAssetId) return;

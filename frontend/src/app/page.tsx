@@ -7,7 +7,7 @@ import InputBar from '@/components/InputBar';
 import ProfilePanel from '@/components/ProfilePanel';
 import Sidebar, { type ConversationSummary } from '@/components/Sidebar';
 import WelcomeScreen from '@/components/WelcomeScreen';
-import WorkspacePanel from '@/components/WorkspacePanel';
+import WorkspacePanel, { type WorkspaceTab } from '@/components/WorkspacePanel';
 import StudioView from '@/components/StudioView';
 import { PLATFORM_LABELS, type Platform } from '@/lib/platforms';
 import { getProfile, listProducts, type Product, type UserProfile } from '@/lib/api';
@@ -31,6 +31,7 @@ export default function Home() {
   const [defaultProductId, setDefaultProductId] = useState<string | null>(null);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [workspaceAssetId, setWorkspaceAssetId] = useState<string | null>(null);
+  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab | undefined>(undefined);
   const [pendingPlatform, setPendingPlatform] = useState<Platform | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -120,7 +121,7 @@ export default function Home() {
 
   return (
     <div className="app-shell">
-      <Sidebar activeId={chat.activeId} conversations={summaries} mobileOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} onNew={newChat} onSelect={openChat} onDelete={chat.deleteConversation} onProfileOpen={() => setProfileOpen(true)} onWorkspaceOpen={() => { setWorkspaceAssetId(null); setWorkspaceOpen(true); }} profile={profile} />
+      <Sidebar activeId={chat.activeId} conversations={summaries} mobileOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} onNew={newChat} onSelect={openChat} onDelete={chat.deleteConversation} onProfileOpen={() => setProfileOpen(true)} onWorkspaceOpen={() => { setWorkspaceAssetId(null); setWorkspaceTab('products'); setWorkspaceOpen(true); }} profile={profile} />
       <main className="main-shell">
         {/* ── Studio View ── */}
         {view === 'studio' ? (
@@ -172,16 +173,30 @@ export default function Home() {
                   })}
                 </div>
               </div>
-            ) : <WelcomeScreen onSelect={startFromPlatform} profile={profile} onProfileOpen={() => setProfileOpen(true)} />}
+            ) : <WelcomeScreen onSelect={startFromPlatform} profile={profile} onProfileOpen={() => setProfileOpen(true)} onOpenWorkspace={(tab) => { setWorkspaceAssetId(null); setWorkspaceTab(tab); setWorkspaceOpen(true); }} />}
 
             {view === 'chat' && (chat.activeConversation || pendingPlatform) && (
-              <InputBar onSend={handleSend} onTextChange={setDraft} pending={chat.pending} text={draft} onStop={chat.stop} />
+              <>
+                {(() => {
+                  const ins = products.find((p) => p.id === chat.activeProductId)?.review_insights;
+                  const loved = ins?.loved_points ?? [];
+                  if (loved.length === 0) return null;
+                  return (
+                    <button className="ctx-insight-strip" onClick={() => { setWorkspaceAssetId(null); setWorkspaceTab('products'); setWorkspaceOpen(true); }}>
+                      <span className="ctx-insight-tag">💬 正在参考评论洞察</span>
+                      <span className="ctx-insight-points">{loved.slice(0, 3).join(' · ')}</span>
+                      <span className="ctx-insight-arrow">管理 →</span>
+                    </button>
+                  );
+                })()}
+                <InputBar onSend={handleSend} onTextChange={setDraft} pending={chat.pending} text={draft} onStop={chat.stop} />
+              </>
             )}
           </>
         )}
       </main>
       <ProfilePanel open={profileOpen} onClose={() => setProfileOpen(false)} onSaved={setProfile} />
-      <WorkspacePanel open={workspaceOpen} onClose={() => { setWorkspaceOpen(false); listProducts().then(setProducts).catch(() => undefined); }} activeProductId={chat.activeProductId} onActiveProductChange={(productId) => {
+      <WorkspacePanel open={workspaceOpen} initialTab={workspaceTab} onClose={() => { setWorkspaceOpen(false); listProducts().then(setProducts).catch(() => undefined); }} activeProductId={chat.activeProductId} onActiveProductChange={(productId) => {
         setDefaultProductId(productId);
         chat.setActiveProduct(productId);
       }} targetAssetId={workspaceAssetId} />
