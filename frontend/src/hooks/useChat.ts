@@ -72,7 +72,8 @@ export function useChat(defaultProductId: string | null) {
   );
   const messages = useMemo(() => activeConversation?.messages ?? [], [activeConversation]);
   const platform = activeConversation?.platform ?? 'xhs';
-  const activeProductId = activeConversation?.productId ?? defaultProductId;
+  // 已有会话只认自己绑定的商品；仅"新会话预览"才回退到默认商品，避免未绑定会话串用全局默认商品
+  const activeProductId = activeConversation ? activeConversation.productId ?? null : defaultProductId;
 
   // 修复历史脏数据：同一会话内重复的消息 ID（旧版 Studio ID bug 留下的）
   const repairMessageIds = (msgs: Message[]): Message[] => {
@@ -286,8 +287,8 @@ export function useChat(defaultProductId: string | null) {
       role: m.role === 'ai' ? 'assistant' as const : 'user' as const,
       content: historyContent(m),
     }));
-    await requestResponse(conversation.id, conversation.platform, text, history, true, conversation.productId ?? defaultProductId, imageUrl);
-  }, [pending, activeConversation, platform, createConversation, requestResponse, defaultProductId]);
+    await requestResponse(conversation.id, conversation.platform, text, history, true, conversation.productId ?? null, imageUrl);
+  }, [pending, activeConversation, platform, createConversation, requestResponse]);
 
   const stop = useCallback(() => {
     abortRef.current?.abort();
@@ -310,8 +311,8 @@ export function useChat(defaultProductId: string | null) {
       if (conv.id !== activeConversation.id) return conv;
       return { ...conv, messages: conv.messages.slice(0, lastUserIndex + 1) };
     }));
-    void requestResponse(activeConversation.id, activeConversation.platform, lastUserText, history, false, activeConversation.productId ?? defaultProductId);
-  }, [activeConversation, pending, requestResponse, defaultProductId]);
+    void requestResponse(activeConversation.id, activeConversation.platform, lastUserText, history, false, activeConversation.productId ?? null);
+  }, [activeConversation, pending, requestResponse]);
 
   const setActiveProduct = useCallback((productId: string | null) => {
     if (activeConversation) {
