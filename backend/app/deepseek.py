@@ -78,6 +78,8 @@ class DeepSeekClient:
             raise DeepSeekError("DeepSeek 返回了无法解析的响应") from exc
         if not content:
             raise DeepSeekError("DeepSeek 返回了空内容")
+        preview = content[:500] + ("…" if len(content) > 500 else "")
+        logger.info("DeepSeek raw content preview: %s", preview)
         message, result = self._parse_content(content, request)
 
         usage_data = response_data.get("usage", {})
@@ -174,18 +176,20 @@ class DeepSeekClient:
     def _parse_content(self, content: str, request: ChatRequest) -> tuple[str, GeneratedContent | None]:
         parsed = self._try_parse_json(content)
         if parsed is None:
-            raise DeepSeekError("DeepSeek 返回了无法解析的结构化内容")
-        if parsed.get("kind") == "chat":
+            logger.warning("DeepSeek 返回非 JSON 内容，降级为闲聊: %s", content[:200])
+            return content[:2000], None
+        kind = parsed.get("kind")
+        if kind == "chat":
             message = str(parsed.get("message", "")).strip()
             if not message:
                 raise DeepSeekError("DeepSeek 返回了空回复")
             return message, None
-        if parsed.get("kind") == "message":
+        if kind == "message":
             message = str(parsed.get("message", "")).strip()
             if not message:
                 raise DeepSeekError("DeepSeek 返回了空追问")
             return message, None
-        if parsed.get("kind") in ("result", "draft"):
+        if kind in ("result", "draft"):
             try:
                 result = GeneratedContent(
                     platform=request.platform,
@@ -198,7 +202,10 @@ class DeepSeekClient:
                 logger.error("DeepSeek 返回结构不完整: %s | parsed keys: %s", exc, list(parsed.keys()))
                 raise DeepSeekError("DeepSeek 返回的成品结构不完整") from exc
             return str(parsed.get("message", "已生成可直接使用的内容。")).strip(), result
-        raise DeepSeekError("DeepSeek 返回了未知内容类型")
+        # 未知 kind：记录日志后降级为闲聊，避免炸用户
+        logger.warning("DeepSeek 返回未知 kind=%s，降级为闲聊 | preview: %s", kind, content[:200])
+        fallback_msg = str(parsed.get("message", "")).strip() or content[:2000]
+        return fallback_msg, None
 
     @staticmethod
     def _try_parse_json(content: str) -> dict | None:
