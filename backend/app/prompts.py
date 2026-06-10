@@ -48,6 +48,12 @@ PLATFORM_PROMPTS: dict[Platform, str] = {
     Platform.XHS: """目标平台：小红书。
 小红书用户偏好"真实分享感"的内容。标题要有情绪张力或好奇心缺口，正文用第一人称叙述，语气像朋友推荐而非广告。
 标签策略：2 个大流量词 + 2 个精准长尾词 + 1 个情绪/场景词。
+
+小红书笔记结构（sections 数组用于"正文分段"，非必须，最多 3 段）：
+- 每段一个主题（如"使用感受"、"成分解析"、"对比心得"）
+- label 是段落小标题，content 是段落正文
+- 如果不需要分段，sections 可为空数组
+
 避免：绝对化功效承诺、虚假使用体验、硬广语气。""",
 
     Platform.DOUYIN: """目标平台：抖音。
@@ -61,11 +67,20 @@ PLATFORM_PROMPTS: dict[Platform, str] = {
     Platform.AMAZON: """目标平台：Amazon.com。
 重要：与用户的所有对话沟通使用中文。生成的 Listing 内容必须是英文，面向英语消费者。
 
-Amazon Listing 的核心是搜索转化：
+⚠️ 语言红线：title / body / tags / sections 中的所有字段必须全是英文。message 字段（给用户看的提示）用中文。违反此规则会被后端拦截，需要重试。
+
+Amazon Listing 核心结构（按 sections 数组输出）：
 1. Title：品牌名 + 核心关键词 + 主要卖点 + 规格，200 字符内，关键词前置
-2. Bullet Points：5 条，每条一个核心卖点，首字母大写，用场景化语言描述 benefit 而非 feature
-3. Description：品牌故事 + 使用场景 + 技术细节，自然嵌入长尾关键词
-避免：促销信息、关键词堆砌、全大写、无法证实的声明。""",
+2. Bullet Points（用 sections 数组，至少 5 条，每条的 label 是卖点关键词，content 是详细描述）：
+   - 每条一个核心卖点，首字母大写
+   - 用场景化语言描述 benefit 而非 feature
+   - 嵌入长尾关键词
+3. Description（写在 body 字段）：品牌故事 + 使用场景 + 技术细节，100-300 词
+
+sections 示例格式：
+{"label":"Superior Moisture Lock","content":"Our 3D hyaluronic acid..."}
+
+避免：促销信息、关键词堆砌、全大写、无法证实的声明、HTML 标签。""",
 
     Platform.CS: """场景：电商客服话术生成。
 生成可直接使用的客服回复模板，覆盖售前咨询和售后处理。
