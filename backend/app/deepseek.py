@@ -89,22 +89,87 @@ class DeepSeekClient:
         logger.info("DeepSeek usage model=%s total_tokens=%s", self.settings.deepseek_model, usage.total_tokens)
         conversation_title = self._parse_title(content)
         questions = self._parse_questions(content)
+        # 平台强契约：校验失败自动矫正一次，仍失败则拦截成品（不展示、不保存）
+        message, result, contract_warnings = await self.enforce_platform_contract(request, message, result, content)
         warnings = None
         if result is not None:
             pp = post_process(result, self._profile.taboo_words if self._profile else None)
             if pp.warnings:
                 warnings = pp.warnings
-            # Platform structure validation
-            validation = validate_platform_content(result)
-            if not validation.valid:
-                platform_warnings = [f"🚫 平台结构校验：{err}" for err in validation.errors]
-                warnings = (warnings or []) + platform_warnings
-                logger.warning("Platform validation failed for %s: %s", request.platform.value, validation.errors)
+        if contract_warnings:
+            warnings = (warnings or []) + contract_warnings
         sources = [
             {"id": source.id, "title": source.title, "url": source.url}
             for source in retrieve_knowledge(request.platform, request.message)
         ]
         return ChatResponse(message=message, result=result, questions=questions, warnings=warnings, conversation_title=conversation_title, model=self.settings.deepseek_model, usage=usage, sources=sources)
+
+    async def enforce_platform_contract(
+        self,
+        request: ChatRequest,
+        message: str,
+        result: GeneratedContent | None,
+        raw_content: str,
+    ) -> tuple[str, GeneratedContent | None, list[str]]:
+        """平台强契约：结构校验失败时最多自动矫正一次；仍失败则拦截成品。
+
+        返回 (message, result, extra_warnings)。被拦截时 result 为 None，
+        调用方不得展示或保存错误成品。
+        """
+        if result is None:
+            return message, None, []
+        validation = validate_platform_content(result)
+        if validation.valid:
+            return message, result, []
+        logger.warning("Platform validation failed for %s: %s", request.platform.value, validation.errors)
+        # 自动矫正一次
+        try:
+            corrected_msg, corrected = await self._request_correction(request, raw_content, validation.errors)
+        except DeepSeekError as exc:
+            logger.warning("Platform auto-correction request failed: %s", exc)
+            corrected_msg, corrected = "", None
+        if corrected is not None:
+            revalidation = validate_platform_content(corrected)
+            if revalidation.valid:
+                logger.info("Platform auto-correction succeeded for %s", request.platform.value)
+                return corrected_msg, corrected, ["⚠️ 内容未通过平台结构校验，已自动矫正一次"]
+            logger.warning("Platform auto-correction still invalid for %s: %s", request.platform.value, revalidation.errors)
+        errors_text = "；".join(validation.errors)
+        blocked_message = (
+            f"本次生成的内容未通过平台结构校验（{errors_text}），已拦截，未展示错误成品。"
+            "请补充商品信息或调整需求后重试。"
+        )
+        return blocked_message, None, [f"🚫 平台结构校验：{err}" for err in validation.errors]
+
+    async def _request_correction(
+        self, request: ChatRequest, raw_content: str, errors: list[str]
+    ) -> tuple[str, GeneratedContent | None]:
+        """带着校验错误请求模型修正上一版输出。"""
+        system_prompt = build_system_prompt(request.platform)
+        correction_instruction = (
+            "你上一次的输出未通过平台结构校验，存在以下问题：" + "；".join(errors) +
+            "。请修正以上全部问题，保持商品事实和卖点不变，重新输出完整 JSON 成品。"
+        )
+        payload = {
+            "model": self.settings.deepseek_model,
+            "thinking": {"type": "disabled"},
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                *[message.model_dump() for message in request.history],
+                {"role": "user", "content": request.message},
+                {"role": "assistant", "content": raw_content},
+                {"role": "user", "content": correction_instruction},
+            ],
+        }
+        response_data = await self._post(payload)
+        try:
+            content = response_data["choices"][0]["message"]["content"].strip()
+        except (KeyError, IndexError, AttributeError) as exc:
+            raise DeepSeekError("矫正请求返回了无法解析的响应") from exc
+        if not content:
+            raise DeepSeekError("矫正请求返回了空内容")
+        return self._parse_content(content, request)
 
     def _parse_content(self, content: str, request: ChatRequest) -> tuple[str, GeneratedContent | None]:
         parsed = self._try_parse_json(content)

@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     deepseek_model: str = "deepseek-v4-flash"
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_timeout_seconds: float = Field(default=30, gt=0, le=120)
-    dashscope_api_key: str = Field(default="", max_length=100)
+    dashscope_api_key: str = Field(default="")
 
 
 @lru_cache

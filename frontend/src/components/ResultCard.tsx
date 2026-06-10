@@ -142,8 +142,8 @@ const AmazonPreview = ({ card, image, dragOver, onDragOver, onDragLeave, onDrop 
   </div>
 );
 
-export default function ResultCard({ card, brandName = '你的品牌', onRegenerate, quality, onEdit }: {
-  card: GeneratedContent; brandName?: string; onRegenerate?: () => void; quality?: QualityReport; onEdit?: () => void;
+export default function ResultCard({ card, brandName = '你的品牌', onRegenerate, quality, onEdit, warnings }: {
+  card: GeneratedContent; brandName?: string; onRegenerate?: () => void; quality?: QualityReport; onEdit?: () => void; warnings?: string[];
 }) {
   const [copied, setCopied] = useState(false);
   const { image, dragOver, onDragOver, onDragLeave, onDrop } = useDropImage();
@@ -168,7 +168,8 @@ export default function ResultCard({ card, brandName = '你的品牌', onRegener
         {card.platform === 'dy' && <DouyinPreview card={card} brandName={brandName} image={image} dragOver={dragOver} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} />}
         {card.platform === 'amazon' && <AmazonPreview card={card} image={image} dragOver={dragOver} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} />}
       </div>
-      <footer className="result-footer"><span className="check">✓ 信息结构通过</span><span className="check">✓ 平台格式已适配</span>{quality && <span className={`quality-pill ${quality.score >= 80 ? 'good' : 'review'}`}>质量 {quality.score}</span>}<span className="tip">生成内容请在发布前核对产品事实</span></footer>
+      {/* 后端强契约保证：校验失败的成品不会到达这里，能渲染即代表结构校验通过 */}
+      <footer className="result-footer"><span className="check">✓ 平台结构校验通过</span>{warnings?.some(w => w.includes('自动矫正')) && <span className="check" style={{ color: 'var(--warn, #b45309)' }}>⚠ 已自动矫正一次</span>}{quality && <span className={`quality-pill ${quality.score >= 80 ? 'good' : 'review'}`}>质量 {quality.score}</span>}<span className="tip">生成内容请在发布前核对产品事实</span></footer>
     </article>
   );
 }

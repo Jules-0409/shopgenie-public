@@ -13,6 +13,7 @@ export interface Message {
   id: string;
   role: 'user' | 'ai';
   text: string;
+  image?: string;
   card?: GeneratedContent;
   questions?: Question[];
   warnings?: string[];
@@ -125,7 +126,7 @@ export default function ChatBubble({ msg, onOptionSelect, onRegenerate, brandNam
           </div>
         )}
         {msg.warnings && msg.warnings.length > 0 && <WarningBanner warnings={msg.warnings} />}
-        {msg.card && <ResultCard card={msg.card} brandName={brandName} onRegenerate={onRegenerate} quality={msg.quality} onEdit={msg.assetId && onEditAsset ? () => onEditAsset(msg.assetId!) : undefined} />}
+        {msg.card && <ResultCard card={msg.card} brandName={brandName} onRegenerate={onRegenerate} quality={msg.quality} warnings={msg.warnings} onEdit={msg.assetId && onEditAsset ? () => onEditAsset(msg.assetId!) : undefined} />}
         {msg.questions && msg.questions.length > 0 && onOptionSelect && (
           <QuestionChips questions={msg.questions} onSubmit={onOptionSelect} />
         )}

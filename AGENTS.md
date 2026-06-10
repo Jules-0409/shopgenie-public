@@ -54,7 +54,7 @@
 | `workspace_context.py` | 将商品事实、相关知识与历史效果组装为生成上下文 |
 | `knowledge_fetch.py` | 安全抓取指定公开网页，拒绝内网、非文本和超大响应 |
 | `web_search.py` | 有界发现最新规则、趋势与竞品公开网页来源 |
-| `studio.py` | 商品图工作室：rembg 抠图 + 通义万相图像编辑换背景 |
+| `studio.py` | 商品图工作室：三视图生成 / 调整外观 / 场景图生成 / 微调，通义万相 Wan2.7 异步 + URL 直传 |
 | `vision.py` | 多模态：Qwen-VL 图片理解 + 通义万相文生图 |
 | `design_image_prompts.py` | 生图场景模板库：18 个电商图 prompt，5 大类 |
 

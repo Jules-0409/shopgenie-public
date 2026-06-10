@@ -1,4 +1,6 @@
+import json
 import logging
+import uuid
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -62,8 +64,16 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+def _ensure_chat_platform(request: ChatRequest) -> None:
+    """Studio 等非聊天平台不进生成链路，避免 PLATFORM_PROMPTS KeyError。"""
+    from app.prompts import PLATFORM_PROMPTS
+    if request.platform not in PLATFORM_PROMPTS:
+        raise HTTPException(status_code=422, detail=f"平台 {request.platform.value} 不支持聊天生成")
+
+
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest, settings: Settings = Depends(get_settings)) -> ChatResponse:
+    _ensure_chat_platform(request)
     task: AgentTask | None = None
     try:
         profile = await run_in_threadpool(get_profile)
@@ -99,6 +109,7 @@ async def chat(request: ChatRequest, settings: Settings = Depends(get_settings))
 
 @app.post("/api/chat/stream")
 async def chat_stream(request: ChatRequest, settings: Settings = Depends(get_settings)) -> StreamingResponse:
+    _ensure_chat_platform(request)
     return StreamingResponse(
         chat_stream_generator(request, settings),
         media_type="text/event-stream",
@@ -382,6 +393,7 @@ class SessionInput(BaseModel):
     title: str = Field(default="", max_length=200)
     product_id: str | None = None
     messages: list[dict[str, Any]] = Field(default_factory=list, max_length=500)
+    studio: dict[str, Any] | None = None
 
 
 @app.get("/api/sessions", response_model=list[StoredSession])
@@ -402,6 +414,7 @@ async def api_save_session(req: SessionInput) -> StoredSession:
     session = StoredSession(
         id=req.id, platform=req.platform.value, title=req.title,
         product_id=req.product_id, messages=req.messages,
+        studio=req.studio,
     )
     await run_in_threadpool(save_session, session)
     return session
@@ -472,62 +485,140 @@ async def api_poll_image(task_id: str, settings: Settings = Depends(get_settings
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
-# --- Studio (商品图工作室) ---
-
+# --- Studio ---
 
 @app.get("/api/studio/templates")
 async def api_studio_templates() -> dict:
-    """返回场景模板列表，供前端 StudioView 使用。"""
     from app.design_image_prompts import ALL_TEMPLATES, TEMPLATES_BY_CATEGORY, PLATFORM_SIZES
-
-    templates = [
-        {
-            "id": t.id,
-            "name": t.name,
-            "description": t.description,
-            "aspect_ratio": t.aspect_ratio,
-            "tags": t.tags,
-        }
-        for t in ALL_TEMPLATES
-    ]
-    categories = {
-        key: {"name": val["name"], "template_ids": [t.id for t in val["templates"]]}
-        for key, val in TEMPLATES_BY_CATEGORY.items()
-    }
+    templates = [{"id": t.id, "name": t.name, "description": t.description, "aspect_ratio": t.aspect_ratio, "tags": t.tags, "prompt_template": t.prompt_template, "builtin": True} for t in ALL_TEMPLATES]
+    categories = {k: {"name": v["name"], "template_ids": [t.id for t in v["templates"]]} for k, v in TEMPLATES_BY_CATEGORY.items()}
+    # merge custom templates
+    custom = _load_custom_templates()
+    for ct in custom:
+        templates.append(ct)
+        cat = ct.get("category", "lifestyle")
+        if cat not in categories:
+            categories[cat] = {"name": ct.get("category_name", cat), "template_ids": []}
+        categories[cat]["template_ids"].append(ct["id"])
     return {"templates": templates, "categories": categories, "platform_sizes": PLATFORM_SIZES}
 
 
-class StudioGenerateInput(BaseModel):
-    image_b64: str = Field(min_length=1, max_length=5000000)  # original product photo base64
+CUSTOM_TEMPLATES_FILE = Path(__file__).resolve().parent / "data" / "custom_scene_templates.json"
+
+def _load_custom_templates() -> list[dict]:
+    try:
+        if CUSTOM_TEMPLATES_FILE.exists():
+            data = json.loads(CUSTOM_TEMPLATES_FILE.read_text())
+            return data if isinstance(data, list) else []
+    except Exception:
+        pass
+    return []
+
+def _save_custom_templates(templates: list[dict]) -> None:
+    CUSTOM_TEMPLATES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    CUSTOM_TEMPLATES_FILE.write_text(json.dumps(templates, ensure_ascii=False, indent=2))
+
+
+class CustomTemplateInput(BaseModel):
+    name: str = Field(..., max_length=50)
+    description: str = Field(default="", max_length=200)
+    prompt_template: str = Field(..., max_length=1000)
+    aspect_ratio: str = Field(default="1:1", max_length=10)
+    tags: list[str] = Field(default_factory=list)
+    category: str = Field(default="lifestyle")
+    category_name: str = Field(default="自定义")
+
+
+@app.post("/api/studio/templates/custom")
+async def api_create_custom_template(body: CustomTemplateInput) -> dict:
+    custom = _load_custom_templates()
+    tid = f"custom-{uuid.uuid4().hex[:8]}"
+    new_tpl = {
+        "id": tid, "name": body.name, "description": body.description,
+        "prompt_template": body.prompt_template, "aspect_ratio": body.aspect_ratio,
+        "tags": body.tags, "builtin": False, "category": body.category,
+        "category_name": body.category_name,
+    }
+    custom.append(new_tpl)
+    _save_custom_templates(custom)
+    return new_tpl
+
+
+@app.delete("/api/studio/templates/custom/{template_id}")
+async def api_delete_custom_template(template_id: str) -> dict:
+    custom = _load_custom_templates()
+    before = len(custom)
+    custom = [t for t in custom if t.get("id") != template_id]
+    _save_custom_templates(custom)
+    return {"deleted": before != len(custom)}
+
+
+class StudioProductInput(BaseModel):
+    base_desc: str = Field(default="", max_length=500)
+    image_b64: str = Field(default="", max_length=5000000)
+
+
+class StudioAdjustInput(BaseModel):
+    reference_b64: str = Field(min_length=1, max_length=5000000)
+    instructions: str = Field(min_length=1, max_length=500)
+
+
+class StudioSceneInput(BaseModel):
+    product_ref_b64: str = Field(min_length=1, max_length=5000000)
     prompt: str = Field(min_length=1, max_length=500)
-    size: str = Field(default="1024*1024", max_length=20)
 
 
-@app.post("/api/studio/generate")
-async def api_studio_generate(req: StudioGenerateInput, settings: Settings = Depends(get_settings)) -> dict:
-    """商品图换背景：传入原始商品图 + 场景描述，AI 自动识别主体并换背景。"""
-    if not settings.dashscope_api_key:
-        raise HTTPException(status_code=503, detail="未配置 DashScope API Key")
+@app.post("/api/studio/generate-product")
+async def api_studio_product(req: StudioProductInput, settings: Settings = Depends(get_settings)) -> dict:
+    if not settings.dashscope_api_key: raise HTTPException(status_code=503, detail="未配置 DashScope API Key")
+    if not req.base_desc.strip() and not req.image_b64:
+        raise HTTPException(status_code=422, detail="产品描述和图片至少提供一项")
     try:
-        from app.studio import edit_image
-
-        result = await edit_image(req.image_b64, req.prompt, settings, req.size)
-        task_id = result.get("output", {}).get("task_id", "")
-        return {"task_id": task_id, "status": "submitted"}
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"图片生成失败: {exc}")
+        from app.studio import submit_product_view
+        from starlette.concurrency import run_in_threadpool
+        tid = await run_in_threadpool(submit_product_view, req.base_desc, req.image_b64, settings)
+        return {"task_id": tid, "status": "submitted"}
+    except Exception as exc: raise HTTPException(status_code=502, detail=f"三视图提交失败: {exc}")
 
 
-@app.get("/api/studio/generate/{task_id}")
+@app.post("/api/studio/adjust-product")
+async def api_studio_adjust(req: StudioAdjustInput, settings: Settings = Depends(get_settings)) -> dict:
+    if not settings.dashscope_api_key: raise HTTPException(status_code=503, detail="未配置 DashScope API Key")
+    try:
+        from app.studio import submit_adjust
+        from starlette.concurrency import run_in_threadpool
+        tid = await run_in_threadpool(submit_adjust, req.reference_b64, req.instructions, settings)
+        return {"task_id": tid, "status": "submitted"}
+    except Exception as exc: raise HTTPException(status_code=502, detail=f"调整失败: {exc}")
+
+
+@app.post("/api/studio/generate-scene")
+async def api_studio_scene(req: StudioSceneInput, settings: Settings = Depends(get_settings)) -> dict:
+    if not settings.dashscope_api_key: raise HTTPException(status_code=503, detail="未配置 DashScope API Key")
+    try:
+        from app.studio import submit_scene
+        from starlette.concurrency import run_in_threadpool
+        tid = await run_in_threadpool(submit_scene, req.product_ref_b64, req.prompt, settings)
+        return {"task_id": tid, "status": "submitted"}
+    except Exception as exc: raise HTTPException(status_code=502, detail=f"场景提交失败: {exc}")
+
+
+@app.post("/api/studio/tweak-scene")
+async def api_studio_tweak(req: StudioSceneInput, settings: Settings = Depends(get_settings)) -> dict:
+    if not settings.dashscope_api_key: raise HTTPException(status_code=503, detail="未配置 DashScope API Key")
+    try:
+        from app.studio import submit_tweak
+        from starlette.concurrency import run_in_threadpool
+        tid = await run_in_threadpool(submit_tweak, req.product_ref_b64, req.prompt, settings)
+        return {"task_id": tid, "status": "submitted"}
+    except Exception as exc: raise HTTPException(status_code=502, detail=f"微调失败: {exc}")
+
+
+@app.get("/api/studio/poll/{task_id}")
 async def api_studio_poll(task_id: str, settings: Settings = Depends(get_settings)) -> dict:
-    """轮询图片编辑任务状态。"""
-    if not settings.dashscope_api_key:
-        raise HTTPException(status_code=503, detail="未配置 DashScope API Key")
+    if not settings.dashscope_api_key: raise HTTPException(status_code=503, detail="未配置 DashScope API Key")
     try:
-        from app.studio import poll_edit_task
-
-        return await poll_edit_task(task_id, settings)
-    except TimeoutError:
-        raise HTTPException(status_code=408, detail="图片生成超时")
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+        from app.studio import poll_task
+        return await poll_task(task_id, settings)
+    except TimeoutError: raise HTTPException(status_code=408, detail="超时")
+    except Exception as exc: raise HTTPException(status_code=502, detail=str(exc))

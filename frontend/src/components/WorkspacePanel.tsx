@@ -4,9 +4,12 @@ import { useEffect, useState } from 'react';
 import {
   addContentVersion,
   createKnowledge,
+  createCustomTemplate,
   createPerformance,
   createProduct,
+  deleteCustomTemplate,
   discoverKnowledge,
+  getDesignTemplates,
   getPerformanceInsights,
   importKnowledge,
   listContentAssets,
@@ -20,15 +23,18 @@ import {
   type AgentTask,
   type ContentAsset,
   type ContentVersion,
+  type ImageTemplate,
+  type DesignTemplates,
   type KnowledgeSource,
   type PerformanceRecord,
   type PerformanceInsights,
   type Product,
 } from '@/lib/api';
 import { PLATFORM_LABELS, type Platform } from '@/lib/platforms';
+import { useEscClose } from '@/hooks/useEscClose';
 import VersionDiff from './VersionDiff';
 
-type Tab = 'products' | 'content' | 'knowledge' | 'tasks' | 'performance';
+type Tab = 'products' | 'content' | 'knowledge' | 'tasks' | 'performance' | 'scene';
 const split = (value: string) => value.split(/[、,，\n]/).map((item) => item.trim()).filter(Boolean);
 
 interface WorkspacePanelProps {
@@ -50,6 +56,7 @@ export default function WorkspacePanel({ open, onClose, activeProductId, onActiv
   const [insights, setInsights] = useState<PerformanceInsights | null>(null);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [error, setError] = useState('');
+  useEscClose(open, onClose);
 
   const refresh = async () => {
     try {
@@ -100,7 +107,7 @@ export default function WorkspacePanel({ open, onClose, activeProductId, onActiv
         </header>
         <nav className="workspace-tabs">
           {([
-            ['products', '商品库'], ['content', '内容资产'], ['knowledge', '知识来源'], ['tasks', 'Agent 任务'], ['performance', '效果数据'],
+            ['products', '商品库'], ['content', '内容资产'], ['knowledge', '知识来源'], ['tasks', 'Agent 任务'], ['performance', '效果数据'], ['scene', '📸 场景'],
           ] as [Tab, string][]).map(([value, label]) => <button className={tab === value ? 'active' : ''} key={value} onClick={() => setTab(value)}>{label}</button>)}
         </nav>
         {error && <div className="workspace-error">{error}</div>}
@@ -110,6 +117,7 @@ export default function WorkspacePanel({ open, onClose, activeProductId, onActiv
           {tab === 'knowledge' && <KnowledgeTab sources={sources} onCreated={refresh} />}
           {tab === 'tasks' && <TasksTab tasks={tasks} assets={assets} onCompleted={refresh} />}
           {tab === 'performance' && <PerformanceTab assets={assets} metrics={metrics} insights={insights} onCreated={refresh} />}
+          {tab === 'scene' && <SceneTab />}
         </div>
       </section>
     </div>
@@ -276,4 +284,95 @@ function PerformanceTab({ assets, metrics, insights, onCreated }: { assets: Cont
     setImpressions(''); setConversions(''); await onCreated();
   };
   return <div className="workspace-grid"><div className="workspace-list">{insights && <div className="performance-summary"><strong>{insights.conversion_rate}%</strong><span>整体转化率</span><p>{insights.summary}</p></div>}{metrics.map((metric) => <div className="workspace-list-item static" key={metric.id}><strong>{assets.find((item) => item.id === metric.asset_id)?.name ?? '内容资产'}</strong><span>曝光 {metric.impressions} · 转化 {metric.conversions}</span></div>)}</div><div className="workspace-editor"><div className="workspace-section-title">记录发布效果</div><label>内容<select value={assetId} onChange={(event) => setAssetId(event.target.value)}><option value="">选择内容资产</option>{assets.map((asset) => <option value={asset.id} key={asset.id}>{asset.name}</option>)}</select></label><label>曝光量<input type="number" min="0" value={impressions} onChange={(event) => setImpressions(event.target.value)} /></label><label>转化数<input type="number" min="0" value={conversions} onChange={(event) => setConversions(event.target.value)} /></label><button className="workspace-primary" disabled={!assetId} onClick={create}>记录效果</button></div></div>;
+}
+
+function SceneTab() {
+  const [tmpl, setTmpl] = useState<DesignTemplates | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  // New template form
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [promptTemplate, setPromptTemplate] = useState('');
+  const [aspectRatio, setAspectRatio] = useState('1:1');
+  const [tags, setTags] = useState('');
+  const [category, setCategory] = useState('lifestyle');
+  const [saving, setSaving] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+
+  const refresh = async () => {
+    try { const d = await getDesignTemplates(); setTmpl(d); } catch { /* ignore */ }
+  };
+  useEffect(() => { getDesignTemplates().then(setTmpl).catch(() => { /* ignore */ }); }, []);
+
+  const all = tmpl?.templates ?? [];
+  const selected = all.find(t => t.id === selectedId) ?? null;
+
+  const handleCreate = async () => {
+    if (!name.trim() || !promptTemplate.trim() || saving) return;
+    setSaving(true);
+    try {
+      await createCustomTemplate({
+        name: name.trim(), description: description.trim(), prompt_template: promptTemplate.trim(),
+        aspect_ratio: aspectRatio, tags: split(tags), category,
+      });
+      setName(''); setDescription(''); setPromptTemplate(''); setTags(''); setAspectRatio('1:1'); setCategory('lifestyle');
+      setShowNew(false);
+      await refresh();
+    } catch (e) { setError(e instanceof Error ? e.message : '创建失败'); }
+    finally { setSaving(false); }
+  };
+
+  const handleDelete = async () => {
+    if (!selected || selected.builtin) return;
+    try {
+      await deleteCustomTemplate(selected.id);
+      setSelectedId(null);
+      await refresh();
+    } catch (e) { setError(e instanceof Error ? e.message : '删除失败'); }
+  };
+
+  return <div className="workspace-grid">
+    <div className="workspace-list">
+      <div className="workspace-section-title">场景模板库<button onClick={() => { setShowNew(true); setSelectedId(null); }} style={{ border: '1px solid var(--line)', borderRadius: 6, fontSize: 10, padding: '2px 8px', cursor: 'pointer', background: 'var(--surface)', marginLeft: 8 }}>+ 新建</button></div>
+      {all.length === 0 && <div className="workspace-empty">模板加载中…</div>}
+      {all.map(t => (
+        <button className={`workspace-list-item${selectedId === t.id ? ' selected' : ''}`} key={t.id} onClick={() => { setSelectedId(t.id); setShowNew(false); }}>
+          <strong>{t.builtin ? '📦 ' : '✏️ '}{t.name}</strong>
+          <span>{t.aspect_ratio} · {t.description.slice(0, 40)}{t.description.length > 40 ? '…' : ''}</span>
+        </button>
+      ))}
+    </div>
+    <div className="workspace-editor">
+      {error && <div className="workspace-error">{error}<button onClick={() => setError('')} style={{ marginLeft: 8, border: 'none', background: 'none', cursor: 'pointer' }}>✕</button></div>}
+
+      {showNew ? (<>
+        <div className="workspace-section-title">新建场景模板</div>
+        <label>模板名称<input value={name} onChange={e => setName(e.target.value)} placeholder="例如：秋季暖光场景" maxLength={50} /></label>
+        <label>描述<input value={description} onChange={e => setDescription(e.target.value)} placeholder="适用场景说明" maxLength={200} /></label>
+        <label>Prompt 模板<textarea className="content-editor-body" value={promptTemplate} onChange={e => setPromptTemplate(e.target.value)} placeholder="英文 prompt，可用 {product} 占位产品名" rows={5} maxLength={1000} /></label>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <label style={{ flex: 1 }}>比例<select value={aspectRatio} onChange={e => setAspectRatio(e.target.value)}>{['1:1','4:5','16:9','9:16'].map(v => <option key={v} value={v}>{v}</option>)}</select></label>
+          <label style={{ flex: 1 }}>分类<select value={category} onChange={e => setCategory(e.target.value)}>{Object.entries(tmpl?.categories ?? {}).map(([k, v]) => <option key={k} value={k}>{v.name}</option>)}</select></label>
+        </div>
+        <label>标签（逗号分隔）<input value={tags} onChange={e => setTags(e.target.value)} placeholder="简约, 自然光" /></label>
+        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+          <button className="workspace-primary" onClick={handleCreate} disabled={!name.trim() || !promptTemplate.trim() || saving}>{saving ? '创建中…' : '保存模板'}</button>
+          <button className="workspace-secondary" onClick={() => setShowNew(false)}>取消</button>
+        </div>
+      </>) : selected ? (<>
+        <div className="workspace-section-title">{selected.name}<span style={{ fontSize: 10, color: 'var(--muted)', marginLeft: 8 }}>{selected.builtin ? '内置' : '自定义'}</span></div>
+        <div className="knowledge-meta">
+          <span className="knowledge-tag">{selected.aspect_ratio}</span>
+          {selected.tags.map(t => <span className="knowledge-type" key={t}>{t}</span>)}
+        </div>
+        <div className="workspace-section-title" style={{ marginTop: 12 }}>描述</div>
+        <div className="knowledge-content">{selected.description || '无描述'}</div>
+        <div className="workspace-section-title" style={{ marginTop: 12 }}>Prompt 模板</div>
+        <div className="knowledge-content" style={{ fontFamily: 'monospace', fontSize: 12, whiteSpace: 'pre-wrap', maxHeight: 300, overflow: 'auto' }}>{selected.prompt_template || '(无)'}</div>
+        {!selected.builtin && <button className="workspace-secondary" onClick={handleDelete} style={{ marginTop: 12, color: '#c44' }}>删除此模板</button>}
+        <button className="workspace-secondary" onClick={() => setSelectedId(null)} style={{ marginTop: 8 }}>返回列表</button>
+      </>) : <div className="workspace-empty">选择一个模板查看其 Prompt，或点击「+ 新建」创建自定义场景模板。</div>}
+    </div>
+  </div>;
 }

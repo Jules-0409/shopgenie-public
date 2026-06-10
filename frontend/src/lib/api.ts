@@ -283,6 +283,7 @@ export interface StoredSession {
   title: string;
   product_id: string | null;
   messages: Record<string, unknown>[];
+  studio?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }
@@ -302,6 +303,8 @@ export interface ImageTemplate {
   description: string;
   aspect_ratio: string;
   tags: string[];
+  prompt_template?: string;
+  builtin?: boolean;
 }
 
 export interface DesignTemplates {
@@ -311,6 +314,16 @@ export interface DesignTemplates {
 }
 
 export const getDesignTemplates = () => requestJson<DesignTemplates>('/shopgenie/api/studio/templates');
+
+export const createCustomTemplate = (data: {
+  name: string; description: string; prompt_template: string;
+  aspect_ratio?: string; tags?: string[]; category?: string; category_name?: string;
+}) => requestJson<ImageTemplate>('/shopgenie/api/studio/templates/custom', {
+  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+});
+
+export const deleteCustomTemplate = (id: string) =>
+  requestJson<{ deleted: boolean }>(`/shopgenie/api/studio/templates/custom/${id}`, { method: 'DELETE' });
 
 export const generateImage = (prompt: string, size: string = '1024*1024') =>
   requestJson<{ task_id: string; status: string }>('/shopgenie/api/vision/generate', {

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { EMPTY_PROFILE, getProfile, saveProfile, type UserProfile } from '@/lib/api';
 import { PLATFORM_LABELS, type Platform } from '@/lib/platforms';
+import { useEscClose } from '@/hooks/useEscClose';
 
 interface ProfilePanelProps {
   open: boolean;
@@ -20,6 +21,7 @@ export default function ProfilePanel({ open, onClose, onSaved }: ProfilePanelPro
   const [error, setError] = useState('');
   const [styleText, setStyleText] = useState('');
   const [tabooText, setTabooText] = useState('');
+  useEscClose(open, onClose);
 
   useEffect(() => {
     if (!open) return;

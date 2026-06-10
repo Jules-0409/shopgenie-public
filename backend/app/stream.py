@@ -10,7 +10,6 @@ from app.config import Settings, get_settings
 from app.deepseek import DeepSeekClient, DeepSeekError
 from app.memory import get_profile
 from app.postprocess import post_process
-from app.platform_validator import validate_platform_content
 from app.schemas import ChatRequest, Platform
 from app.workspace import get_product
 from app.workspace_context import learn_product_from_message
@@ -88,15 +87,16 @@ async def chat_stream_generator(
         warnings = None
         if result is not None:
             yield sse_event("status", {"step": "postprocessing", "message": "正在质检..."})
-            pp = post_process(result)
-            if pp.warnings:
-                warnings = pp.warnings
-            # Platform structure validation
-            validation = validate_platform_content(result)
-            if not validation.valid:
-                platform_warnings = [f"🚫 平台结构校验：{err}" for err in validation.errors]
-                warnings = (warnings or []) + platform_warnings
-                logger.warning("Platform validation failed for %s: %s", request.platform.value, validation.errors)
+            # 平台强契约：校验失败自动矫正一次，仍失败则拦截（result 置 None，不展示不保存）
+            message, result, contract_warnings = await client.enforce_platform_contract(
+                request, message, result, full_content,
+            )
+            if result is not None:
+                pp = post_process(result, profile.taboo_words if profile else None)
+                if pp.warnings:
+                    warnings = pp.warnings
+            if contract_warnings:
+                warnings = (warnings or []) + contract_warnings
 
         # Step 7: Save to workspace
         from app.workspace import create_agent_task, complete_agent_task, create_content_asset
@@ -114,6 +114,11 @@ async def chat_stream_generator(
             await run_in_threadpool(complete_agent_task, task, message[:200])
 
         # Step 8: Final result
+        from app.workspace_context import retrieve_knowledge
+        sources = [
+            {"id": source.id, "title": source.title, "url": source.url}
+            for source in retrieve_knowledge(request.platform, request.message)
+        ]
         response_data = {
             "message": message,
             "result": result.model_dump() if result else None,
@@ -123,7 +128,7 @@ async def chat_stream_generator(
             "asset_id": asset_id,
             "quality": quality if quality else None,
             "task_id": task.id,
-            "sources": [],
+            "sources": sources,
         }
         yield sse_event("result", response_data)
         yield sse_event("done", {"status": "ok"})

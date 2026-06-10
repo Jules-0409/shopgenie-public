@@ -46,6 +46,17 @@ export default function Home() {
 
   useEffect(() => { chat.hydrate(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 输入草稿防刷新丢失（sessionStorage：标签页内有效）
+  useEffect(() => {
+    // 异步恢复草稿，规避 set-state-in-effect 的级联渲染
+    Promise.resolve().then(() => {
+      try { const saved = window.sessionStorage.getItem('shopgenie.draft'); if (saved) setDraft(saved); } catch { /* ignore */ }
+    });
+  }, []);
+  useEffect(() => {
+    try { window.sessionStorage.setItem('shopgenie.draft', draft); } catch { /* ignore */ }
+  }, [draft]);
+
   useEffect(() => { chat.persist(); }, [chat.conversations, chat.hydrated]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -61,7 +72,9 @@ export default function Home() {
     chat.setActiveId(id);
     setDraft('');
     setPendingPlatform(null);
-    setView('chat');
+    // Check if the target conversation is a studio one
+    const target = chat.conversations.find((c) => c.id === id);
+    setView(target?.platform === 'studio' ? 'studio' : 'chat');
   };
 
   const newChat = () => {
@@ -73,6 +86,8 @@ export default function Home() {
 
   const startFromPlatform = (actionPlatform: Platform, _title: string) => {
     if (actionPlatform === 'studio') {
+      // 清掉当前活跃会话，避免 Studio 状态写进聊天会话
+      chat.setActiveId(null);
       setView('studio');
       return;
     }
@@ -109,7 +124,17 @@ export default function Home() {
       <main className="main-shell">
         {/* ── Studio View ── */}
         {view === 'studio' ? (
-          <StudioView />
+          <>
+            <header className="topbar">
+              <div className="topbar-inner">
+                <button aria-label="打开导航" className="icon-button mobile-menu" onClick={() => setMobileNavOpen(true)}><BrandMark s={18} /></button>
+                <span className="platform-pill studio">{platformIcon('studio')}商品图工作室</span>
+                <span className="topbar-title">{chat.activeConversation?.platform === 'studio' ? chat.activeConversation.title : '新建商品图'}</span>
+                <button className="icon-button" style={{ marginLeft: 'auto', fontSize: 13, width: 'auto', padding: '0 10px' }} onClick={newChat}>← 返回</button>
+              </div>
+            </header>
+            <StudioView chat={chat} />
+          </>
         ) : (
           <>
             <header className="topbar">

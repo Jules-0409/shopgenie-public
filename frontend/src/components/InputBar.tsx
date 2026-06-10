@@ -3,6 +3,7 @@
 import type { ChangeEvent, KeyboardEvent } from 'react';
 import { useRef, useState } from 'react';
 import { IconSend } from './Icons';
+import { toast } from '@/lib/toast';
 
 interface InputBarProps {
   pending: boolean;
@@ -35,12 +36,16 @@ export default function InputBar({ pending, text, onSend, onTextChange, onStop }
   const handleImageSelect = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      alert('图片不能超过 5MB');
-      return;
-    }
     const reader = new FileReader();
-    reader.onload = () => setImagePreview(reader.result as string);
+    reader.onload = () => {
+      const data = reader.result as string;
+      // 与后端 base64 上限（5,000,000 字符）一致：按编码后实际长度校验
+      if (data.length > 5_000_000) {
+        toast('图片编码后超过限制，请压缩到约 3.5MB 以内');
+        return;
+      }
+      setImagePreview(data);
+    };
     reader.readAsDataURL(file);
     event.target.value = '';
   };

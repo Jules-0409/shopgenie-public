@@ -6,12 +6,24 @@ import type { Platform } from '@/lib/platforms';
 import { PLATFORM_LABELS } from '@/lib/platforms';
 import { saveStoredSession, deleteStoredSession, listStoredSessions, sendChatStream } from '@/lib/api';
 
-interface Conversation {
+export interface Conversation {
   id: string;
   title: string;
+  /** 标题已最终确定（来自成品标题或后端），不再被自动命名覆盖 */
+  named?: boolean;
   platform: Platform;
   messages: Message[];
   productId?: string | null;
+  studio?: {
+    phase: 'define' | 'scene';
+    ref: string | null;
+    adjHistory: string[];
+    results: Array<{ url: string; tweaking: boolean }>;
+    tmplCat: string;
+    prompt: string;
+    desc: string;
+    pendingTask?: { tid: string; kind: 'gen' | 'adjust' | 'scene'; adj?: string } | null;
+  };
 }
 
 const STORAGE_KEY = 'shopgenie.conversations.v1';
@@ -62,15 +74,44 @@ export function useChat(defaultProductId: string | null) {
   const platform = activeConversation?.platform ?? 'xhs';
   const activeProductId = activeConversation?.productId ?? defaultProductId;
 
+  // 修复历史脏数据：同一会话内重复的消息 ID（旧版 Studio ID bug 留下的）
+  const repairMessageIds = (msgs: Message[]): Message[] => {
+    const seen = new Set<string>();
+    return msgs.map((m) => {
+      let id = m.id;
+      while (seen.has(id)) id = `${id}-r`;
+      seen.add(id);
+      return id === m.id ? m : { ...m, id };
+    });
+  };
+
+  // 刷新时把残留的"微调中"标记复位（任务已无人轮询）
+  const repairStudio = (s?: Conversation['studio']): Conversation['studio'] =>
+    s ? { ...s, results: (s.results ?? []).map(r => ({ ...r, tweaking: false })) } : s;
+
   const hydrate = useCallback(async () => {
     // Try loading from backend first
     try {
       const stored = await listStoredSessions();
       if (stored.length > 0) {
-        const restored: Conversation[] = stored.map((s) => ({
-          id: s.id, title: s.title, platform: s.platform as Platform,
-          productId: s.product_id, messages: s.messages as unknown as Message[],
-        }));
+        const seen = new Set<string>();
+        const restored: Conversation[] = [];
+        for (const s of stored) {
+          if (seen.has(s.id)) continue;
+          seen.add(s.id);
+          restored.push({
+            id: s.id, title: s.title, named: true, platform: s.platform as Platform,
+            productId: s.product_id,
+            messages: repairMessageIds(s.messages as unknown as Message[]),
+            studio: repairStudio(s.studio as Conversation['studio']),
+          });
+        }
+        // sort by updated_at desc (most recent first)
+        restored.sort((a, b) => {
+          const sa = stored.find(s => s.id === a.id);
+          const sb = stored.find(s => s.id === b.id);
+          return (sb?.updated_at ?? '').localeCompare(sa?.updated_at ?? '');
+        });
         setConversations([...restored, DEMO_CONVERSATION]);
         setActiveId(restored[0].id);
         idCounter.current = restored.reduce((max, c) => {
@@ -91,8 +132,12 @@ export function useChat(defaultProductId: string | null) {
       try {
         const saved = JSON.parse(raw) as Conversation[];
         if (Array.isArray(saved) && saved.length > 0) {
-          setConversations([...saved, DEMO_CONVERSATION]);
-          setActiveId(saved[0].id);
+          const seen = new Set<string>();
+          const deduped = saved
+            .filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true; })
+            .map(c => ({ ...c, messages: repairMessageIds(c.messages), studio: repairStudio(c.studio) }));
+          setConversations([...deduped, DEMO_CONVERSATION]);
+          setActiveId(deduped[0].id);
           idCounter.current = saved.reduce((max, c) => {
             const maxId = c.messages.reduce((m, msg) => {
               const num = parseInt(msg.id.replace('message-', ''), 10);
@@ -121,15 +166,20 @@ export function useChat(defaultProductId: string | null) {
           id: conv.id, platform: conv.platform, title: conv.title,
           product_id: conv.productId ?? null,
           messages: conv.messages as unknown as Record<string, unknown>[],
+          studio: conv.studio as Record<string, unknown> | undefined,
         }).catch(() => { /* ignore */ });
       }
     }, 1500);
   }, [conversations, hydrated]);
 
   const appendMessage = useCallback((conversationId: string, message: Message) => {
-    setConversations((current) => current.map((c) =>
-      c.id === conversationId ? { ...c, messages: [...c.messages, message] } : c,
-    ));
+    setConversations((current) => {
+      const idx = current.findIndex((c) => c.id === conversationId);
+      if (idx < 0) return current;
+      const updated = { ...current[idx], messages: [...current[idx].messages, message] };
+      const others = current.filter((_, i) => i !== idx);
+      return [updated, ...others];  // move to top
+    });
   }, []);
 
   const replacePending = useCallback((conversationId: string, pendingId: string, message: Message) => {
@@ -191,9 +241,17 @@ export function useChat(defaultProductId: string | null) {
           taskId: r.task_id as string | undefined,
           sources: r.sources as Message['sources'],
         });
+        // 自动命名：后端给的标题优先；否则首个成品的 title 替换"首条消息截断"式标题
+        const cardTitle = r.result && typeof (r.result as Record<string, unknown>).title === 'string'
+          ? String((r.result as Record<string, unknown>).title) : null;
         if (r.conversation_title) {
           setConversations((current) => current.map((item) =>
-            item.id === conversationId ? { ...item, title: String(r.conversation_title) } : item,
+            item.id === conversationId ? { ...item, title: String(r.conversation_title), named: true } : item,
+          ));
+        } else if (cardTitle) {
+          const short = cardTitle.length > 24 ? `${cardTitle.slice(0, 24)}…` : cardTitle;
+          setConversations((current) => current.map((item) =>
+            item.id === conversationId && !item.named ? { ...item, title: short, named: true } : item,
           ));
         }
       }
@@ -285,5 +343,6 @@ export function useChat(defaultProductId: string | null) {
     hydrate, persist,
     send, stop, regenerate,
     createConversation, setActiveProduct, deleteConversation,
+    appendMessage,
   };
 }

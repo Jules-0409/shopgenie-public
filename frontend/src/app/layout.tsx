@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import Toaster from "@/components/Toaster";
 
 export const metadata: Metadata = {
   title: "ShopGenie · 商店精灵",
@@ -13,7 +14,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN" className="h-full antialiased">
-      <body className="h-full overflow-hidden">{children}</body>
+      <body className="h-full overflow-hidden">{children}<Toaster /></body>
     </html>
   );
 }

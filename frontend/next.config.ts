@@ -9,7 +9,8 @@ const nextConfig: NextConfig = {
     if (isProd) return [];
     return [
       {
-        source: "/shopgenie/api/:path*",
+        // basePath 会自动加在 source 前面，这里写 /api 实际匹配 /shopgenie/api
+        source: "/api/:path*",
         destination: "http://localhost:8000/api/:path*",
       },
     ];
