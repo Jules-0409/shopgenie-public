@@ -36,7 +36,7 @@ const SCENARIOS = [
   {
     platform: 'studio' as Platform,
     label: '商品图工作室',
-    description: '上传商品图 → 智能抠图 → 换场景背景',
+    description: '生成商品三视图 → 调整外观 → 一键换场景',
     icon: '📸',
   },
 ];
