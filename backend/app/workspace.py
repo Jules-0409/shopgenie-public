@@ -100,6 +100,22 @@ class PerformanceRecord:
     recorded_at: str = field(default_factory=_now)
 
 
+@dataclass
+class Experiment:
+    """A/B 实验：同一商品同平台下，多个标题/钩子变体竞速，按转化率分胜负。"""
+    id: str = field(default_factory=lambda: _id("exp"))
+    product_id: str | None = None
+    platform: str = Platform.XHS.value
+    name: str = ""
+    brief: str = ""
+    # 每个变体：{label, title, hook, impressions, clicks, conversions}
+    variants: list[dict] = field(default_factory=list)
+    status: str = "running"          # running | decided
+    winner_label: str | None = None
+    created_at: str = field(default_factory=_now)
+    updated_at: str = field(default_factory=_now)
+
+
 def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(str(memory.DB_PATH))
     conn.row_factory = sqlite3.Row
@@ -123,6 +139,9 @@ def _connect() -> sqlite3.Connection:
         );
         CREATE TABLE IF NOT EXISTS performance_records (
             id TEXT PRIMARY KEY, asset_id TEXT NOT NULL, data TEXT NOT NULL, recorded_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS experiments (
+            id TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT NOT NULL
         );
     """)
     conn.commit()
@@ -371,3 +390,48 @@ def build_performance_insights() -> dict[str, int | float | str]:
     rate = round(conversions / impressions * 100, 2) if impressions else 0
     summary = f"已记录 {len(records)} 次发布，累计曝光 {impressions}，转化 {conversions}，整体转化率 {rate}%。"
     return {"records": len(records), "impressions": impressions, "conversions": conversions, "conversion_rate": rate, "summary": summary}
+
+
+# ── A/B 实验 ──
+
+def _variant_cvr(variant: dict) -> float:
+    impressions = variant.get("impressions") or 0
+    return (variant.get("conversions") or 0) / impressions if impressions else 0.0
+
+
+def compute_winner(experiment: Experiment) -> Experiment:
+    """按转化率判定赢家（同率比点击、再比曝光）；无任一变体有曝光则保持 running。"""
+    scored = [v for v in experiment.variants if (v.get("impressions") or 0) > 0]
+    if not scored:
+        experiment.winner_label = None
+        experiment.status = "running"
+        return experiment
+    best = max(scored, key=lambda v: (_variant_cvr(v), v.get("clicks") or 0, v.get("impressions") or 0))
+    experiment.winner_label = best.get("label")
+    experiment.status = "decided"
+    return experiment
+
+
+def save_experiment(experiment: Experiment) -> Experiment:
+    experiment.updated_at = _now()
+    _upsert("experiments", experiment.id, asdict(experiment))
+    return experiment
+
+
+def list_experiments(product_id: str | None = None) -> list[Experiment]:
+    experiments = _list("experiments", Experiment)
+    return [e for e in experiments if not product_id or e.product_id == product_id]
+
+
+def get_experiment(experiment_id: str) -> Experiment | None:
+    return _get("experiments", experiment_id, Experiment)
+
+
+def delete_experiment(experiment_id: str) -> bool:
+    conn = _connect()
+    try:
+        cursor = conn.execute("DELETE FROM experiments WHERE id = ?", (experiment_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()

@@ -13,7 +13,7 @@ from app.platform_validator import validate_platform_content
 from app.prompts import build_system_prompt
 from app.schemas import ChatRequest, ChatResponse, ContentSection, GeneratedContent, Usage
 from app.workspace import Product
-from app.workspace_context import build_knowledge_prompt, build_performance_prompt, build_product_prompt, build_content_history_prompt, retrieve_knowledge
+from app.workspace_context import build_knowledge_prompt, build_performance_prompt, build_product_prompt, build_content_history_prompt, build_experiment_prompt, retrieve_knowledge
 from app.competitive_analysis import search_competitors, build_competitive_context
 
 logger = logging.getLogger(__name__)
@@ -55,6 +55,9 @@ class DeepSeekClient:
         performance_prompt = build_performance_prompt(request.product_id, request.platform)
         if performance_prompt:
             system_prompt = f"{system_prompt}\n\n{performance_prompt}"
+        experiment_prompt = build_experiment_prompt(request.product_id, request.platform)
+        if experiment_prompt:
+            system_prompt = f"{system_prompt}\n\n{experiment_prompt}"
         content_history_prompt = build_content_history_prompt(request.product_id, request.platform)
         if content_history_prompt:
             system_prompt = f"{system_prompt}\n\n{content_history_prompt}"
@@ -354,6 +357,9 @@ class DeepSeekClient:
         performance_prompt = build_performance_prompt(request.product_id, request.platform)
         if performance_prompt:
             system_prompt = f"{system_prompt}\n\n{performance_prompt}"
+        experiment_prompt = build_experiment_prompt(request.product_id, request.platform)
+        if experiment_prompt:
+            system_prompt = f"{system_prompt}\n\n{experiment_prompt}"
         content_history_prompt = build_content_history_prompt(request.product_id, request.platform)
         if content_history_prompt:
             system_prompt = f"{system_prompt}\n\n{content_history_prompt}"

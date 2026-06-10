@@ -38,6 +38,29 @@ export interface ReviewInsights {
   review_count: number;
 }
 
+export interface ExperimentVariant {
+  label: string;
+  title: string;
+  hook: string;
+  angle: string;
+  impressions: number;
+  clicks: number;
+  conversions: number;
+}
+
+export interface Experiment {
+  id: string;
+  product_id: string | null;
+  platform: Platform;
+  name: string;
+  brief: string;
+  variants: ExperimentVariant[];
+  status: 'running' | 'decided';
+  winner_label: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -263,6 +286,14 @@ export const analyzeReviews = (productId: string, reviews: string) => requestJso
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reviews }),
 });
 export const clearReviews = (productId: string) => requestJson<Product>(`/shopgenie/api/products/${productId}/reviews`, { method: 'DELETE' });
+export const listExperiments = (productId?: string | null) => requestJson<Experiment[]>(`/shopgenie/api/experiments${productId ? `?product_id=${encodeURIComponent(productId)}` : ''}`);
+export const generateExperiment = (input: { product_id: string | null; platform: Platform; brief: string; n?: number }) => requestJson<Experiment>('/shopgenie/api/experiments/generate', {
+  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+});
+export const recordVariantMetrics = (experimentId: string, m: { label: string; impressions: number; clicks: number; conversions: number }) => requestJson<Experiment>(`/shopgenie/api/experiments/${experimentId}/metrics`, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(m),
+});
+export const deleteExperiment = (experimentId: string) => requestJson<{ deleted: boolean }>(`/shopgenie/api/experiments/${experimentId}`, { method: 'DELETE' });
 export const listContentAssets = () => requestJson<ContentAsset[]>('/shopgenie/api/content');
 export const listContentVersions = (assetId: string) => requestJson<ContentVersion[]>(`/shopgenie/api/content/${assetId}/versions`);
 export const addContentVersion = (assetId: string, content: GeneratedContent, changeNote: string) => requestJson<ContentVersion>(`/shopgenie/api/content/${assetId}/versions`, {

@@ -5,6 +5,10 @@ import {
   addContentVersion,
   analyzeReviews,
   clearReviews,
+  deleteExperiment,
+  generateExperiment,
+  listExperiments,
+  recordVariantMetrics,
   createKnowledge,
   createCustomTemplate,
   createPerformance,
@@ -31,13 +35,15 @@ import {
   type PerformanceRecord,
   type PerformanceInsights,
   type Product,
+  type Experiment,
+  type ExperimentVariant,
 } from '@/lib/api';
 import { toast } from '@/lib/toast';
 import { PLATFORM_LABELS, type Platform } from '@/lib/platforms';
 import { useEscClose } from '@/hooks/useEscClose';
 import VersionDiff from './VersionDiff';
 
-type Tab = 'products' | 'content' | 'knowledge' | 'tasks' | 'performance' | 'scene';
+type Tab = 'products' | 'content' | 'experiments' | 'knowledge' | 'tasks' | 'performance' | 'scene';
 const split = (value: string) => value.split(/[、,，\n]/).map((item) => item.trim()).filter(Boolean);
 
 interface WorkspacePanelProps {
@@ -57,14 +63,15 @@ export default function WorkspacePanel({ open, onClose, activeProductId, onActiv
   const [tasks, setTasks] = useState<AgentTask[]>([]);
   const [metrics, setMetrics] = useState<PerformanceRecord[]>([]);
   const [insights, setInsights] = useState<PerformanceInsights | null>(null);
+  const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [error, setError] = useState('');
   useEscClose(open, onClose);
 
   const refresh = async () => {
     try {
-      const [nextProducts, nextAssets, nextSources, nextTasks, nextMetrics, nextInsights] = await Promise.all([
-        listProducts(), listContentAssets(), listKnowledge(), listTasks(), listPerformance(), getPerformanceInsights(),
+      const [nextProducts, nextAssets, nextSources, nextTasks, nextMetrics, nextInsights, nextExperiments] = await Promise.all([
+        listProducts(), listContentAssets(), listKnowledge(), listTasks(), listPerformance(), getPerformanceInsights(), listExperiments(),
       ]);
       setProducts(nextProducts);
       setAssets(nextAssets);
@@ -72,6 +79,7 @@ export default function WorkspacePanel({ open, onClose, activeProductId, onActiv
       setTasks(nextTasks);
       setMetrics(nextMetrics);
       setInsights(nextInsights);
+      setExperiments(nextExperiments);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : '工作台加载失败');
     }
@@ -110,13 +118,14 @@ export default function WorkspacePanel({ open, onClose, activeProductId, onActiv
         </header>
         <nav className="workspace-tabs">
           {([
-            ['products', '商品库'], ['content', '内容资产'], ['knowledge', '知识来源'], ['tasks', 'Agent 任务'], ['performance', '效果数据'], ['scene', '📸 场景'],
+            ['products', '商品库'], ['content', '内容资产'], ['experiments', '🧪 A/B 实验'], ['knowledge', '知识来源'], ['tasks', 'Agent 任务'], ['performance', '效果数据'], ['scene', '📸 场景'],
           ] as [Tab, string][]).map(([value, label]) => <button className={tab === value ? 'active' : ''} key={value} onClick={() => setTab(value)}>{label}</button>)}
         </nav>
         {error && <div className="workspace-error">{error}</div>}
         <div className="workspace-body">
           {tab === 'products' && <ProductsTab products={products} activeProductId={activeProductId} onSelect={onActiveProductChange} onCreated={refresh} />}
           {tab === 'content' && <ContentTab key={versions[0]?.id ?? 'empty'} assets={assets} products={products} selectedAssetId={selectedAssetId} versions={versions} onSelect={setSelectedAssetId} onSaved={async () => { await refresh(); if (selectedAssetId) setVersions(await listContentVersions(selectedAssetId)); }} />}
+          {tab === 'experiments' && <ExperimentsTab experiments={experiments} products={products} activeProductId={activeProductId} onChanged={refresh} />}
           {tab === 'knowledge' && <KnowledgeTab sources={sources} onCreated={refresh} />}
           {tab === 'tasks' && <TasksTab tasks={tasks} assets={assets} onCompleted={refresh} />}
           {tab === 'performance' && <PerformanceTab assets={assets} metrics={metrics} insights={insights} onCreated={refresh} />}
@@ -240,6 +249,118 @@ function ReviewChips({ title, tone, items }: { title: string; tone: string; item
     <div className="review-chip-group">
       <span className="review-chip-title">{title}</span>
       <div className="review-chip-row">{items.map((item, i) => <span className={`review-chip review-chip-${tone}`} key={i}>{item}</span>)}</div>
+    </div>
+  );
+}
+
+const cvr = (v: ExperimentVariant) => v.impressions > 0 ? (v.conversions / v.impressions * 100) : 0;
+
+function ExperimentsTab({ experiments, products, activeProductId, onChanged }: {
+  experiments: Experiment[]; products: Product[]; activeProductId: string | null; onChanged: () => Promise<void>;
+}) {
+  const [platform, setPlatform] = useState<Platform>('xhs');
+  const [brief, setBrief] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const generate = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await generateExperiment({ product_id: activeProductId, platform, brief: brief.trim() });
+      setBrief('');
+      toast('已生成变体，去真实投放后回填曝光/转化', 'success');
+      await onChanged();
+    } catch (error) {
+      toast(error instanceof Error ? error.message : '变体生成失败');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="experiments-tab">
+      <div className="workspace-editor exp-generator">
+        <div className="workspace-section-title">🧪 新建 A/B 实验</div>
+        <p className="review-hint">同一商品产出多个标题/钩子变体 → 真实投放 → 回填数据 → 系统判定赢家 → 赢家风格反哺后续生成。{activeProductId ? `当前商品：${products.find((p) => p.id === activeProductId)?.name ?? ''}` : '未选商品，将仅按下方描述生成。'}</p>
+        <label>平台
+          <select value={platform} onChange={(e) => setPlatform(e.target.value as Platform)}>
+            {(['xhs', 'dy', 'amazon', 'cs'] as Platform[]).map((p) => <option key={p} value={p}>{PLATFORM_LABELS[p]}</option>)}
+          </select>
+        </label>
+        <label>对比方向 / 补充描述（可选）<textarea value={brief} onChange={(e) => setBrief(e.target.value)} placeholder="例如：主打学生党性价比，想试不同钩子角度" rows={2} /></label>
+        <button className="workspace-primary" disabled={busy} onClick={generate}>{busy ? '生成中…' : '生成 3 个变体'}</button>
+      </div>
+
+      <div className="exp-list">
+        {experiments.length === 0 && <div className="workspace-empty">还没有实验。生成一组变体，开始你的第一次 A/B。</div>}
+        {experiments.map((exp) => <ExperimentCard key={exp.id} experiment={exp} products={products} onChanged={onChanged} />)}
+      </div>
+    </div>
+  );
+}
+
+function ExperimentCard({ experiment, products, onChanged }: { experiment: Experiment; products: Product[]; onChanged: () => Promise<void> }) {
+  const productName = products.find((p) => p.id === experiment.product_id)?.name;
+  const remove = async () => { await deleteExperiment(experiment.id); toast('已删除实验', 'info'); await onChanged(); };
+
+  return (
+    <div className={`exp-card ${experiment.status === 'decided' ? 'decided' : ''}`}>
+      <div className="exp-card-head">
+        <div>
+          <strong>{experiment.name || '未命名实验'}</strong>
+          <span className="exp-meta">{PLATFORM_LABELS[experiment.platform]}{productName ? ` · ${productName}` : ''}</span>
+        </div>
+        <div className="exp-head-right">
+          {experiment.status === 'decided'
+            ? <span className="exp-status decided">赢家 {experiment.winner_label}</span>
+            : <span className="exp-status running">投放中</span>}
+          <button className="review-clear" onClick={remove}>删除</button>
+        </div>
+      </div>
+      <div className="exp-variants">
+        {experiment.variants.map((v) => <VariantRow key={v.label} experimentId={experiment.id} variant={v} isWinner={experiment.winner_label === v.label} onChanged={onChanged} />)}
+      </div>
+    </div>
+  );
+}
+
+function VariantRow({ experimentId, variant, isWinner, onChanged }: { experimentId: string; variant: ExperimentVariant; isWinner: boolean; onChanged: () => Promise<void> }) {
+  const [imp, setImp] = useState(String(variant.impressions || ''));
+  const [clk, setClk] = useState(String(variant.clicks || ''));
+  const [cnv, setCnv] = useState(String(variant.conversions || ''));
+  const [busy, setBusy] = useState(false);
+  const rate = cvr(variant);
+
+  const save = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await recordVariantMetrics(experimentId, { label: variant.label, impressions: Number(imp) || 0, clicks: Number(clk) || 0, conversions: Number(cnv) || 0 });
+      toast('已记录，赢家自动更新', 'success');
+      await onChanged();
+    } catch (error) {
+      toast(error instanceof Error ? error.message : '记录失败');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className={`variant-row ${isWinner ? 'winner' : ''}`}>
+      <div className="variant-head">
+        <span className="variant-label">{variant.label}</span>
+        {variant.angle && <span className="variant-angle">{variant.angle}</span>}
+        {isWinner && <span className="variant-crown">🏆 转化最高</span>}
+        {variant.impressions > 0 && <span className="variant-cvr">{rate.toFixed(2)}% 转化</span>}
+      </div>
+      <div className="variant-title">{variant.title}</div>
+      {variant.hook && <div className="variant-hook">开头：{variant.hook}</div>}
+      <div className="variant-metrics">
+        <label>曝光<input type="number" min="0" value={imp} onChange={(e) => setImp(e.target.value)} /></label>
+        <label>点击<input type="number" min="0" value={clk} onChange={(e) => setClk(e.target.value)} /></label>
+        <label>转化<input type="number" min="0" value={cnv} onChange={(e) => setCnv(e.target.value)} /></label>
+        <button className="variant-save" disabled={busy} onClick={save}>{busy ? '…' : '记录'}</button>
+      </div>
     </div>
   );
 }

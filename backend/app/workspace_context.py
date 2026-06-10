@@ -7,6 +7,7 @@ from app.workspace import (
     Product,
     get_current_version,
     list_content_assets,
+    list_experiments,
     list_knowledge_sources,
     list_performance,
     save_product,
@@ -117,6 +118,32 @@ def build_performance_prompt(product_id: str | None, platform: Platform) -> str:
         for rate, _, name, record in rows[:5]
     ]
     return "【历史发布效果】\n参考历史高表现内容的表达策略，但不要编造原因或承诺相同效果。\n" + "\n".join(lines)
+
+
+def build_experiment_prompt(product_id: str | None, platform: Platform) -> str:
+    """把已分胜负的 A/B 实验赢家（标题/钩子风格）反哺给生成。"""
+    if not product_id:
+        return ""
+    winners = []
+    for exp in list_experiments(product_id):
+        if exp.platform != platform.value or exp.status != "decided" or not exp.winner_label:
+            continue
+        win = next((v for v in exp.variants if v.get("label") == exp.winner_label), None)
+        if not win:
+            continue
+        impressions = win.get("impressions") or 0
+        cvr = round((win.get("conversions") or 0) / impressions * 100, 2) if impressions else 0
+        title = (win.get("title") or "").strip()
+        hook = (win.get("hook") or "").strip()
+        if title or hook:
+            desc = title + (f"｜开头：{hook}" if hook else "")
+            winners.append((cvr, f"- {desc}（转化率 {cvr}%）"))
+    if not winners:
+        return ""
+    winners.sort(reverse=True, key=lambda item: item[0])
+    lines = [line for _, line in winners[:5]]
+    return ("【A/B 验证过的高转化表达】\n以下标题/开头在真实投放中转化率最高，"
+            "新内容请延续它们的钩子结构和表达风格，但不要照抄文字。\n" + "\n".join(lines))
 
 
 def build_content_history_prompt(product_id: str | None, platform: Platform) -> str:

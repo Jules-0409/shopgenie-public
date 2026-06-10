@@ -1054,3 +1054,35 @@ body::after {
   .result-card, .result-card::after, .result-card .post-tag { animation: none !important; }
   .platform-preview-card:hover { transform: translateY(-4px); }
 }
+
+/* ── A/B 实验 ── */
+.experiments-tab { display: flex; flex-direction: column; gap: 18px; }
+.exp-generator label { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; font-size: 12px; font-weight: 600; color: var(--ink); }
+.exp-list { display: flex; flex-direction: column; gap: 14px; }
+.exp-card { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); overflow: hidden; box-shadow: var(--shadow-sm); }
+.exp-card.decided { border-color: #cfe4d8; }
+.exp-card-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--line-soft); background: #faf8f4; }
+.exp-card-head strong { font-size: 13.5px; }
+.exp-meta { margin-left: 8px; font-size: 11px; color: var(--faint); }
+.exp-head-right { display: flex; align-items: center; gap: 8px; }
+.exp-status { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 7px; }
+.exp-status.running { background: #f1f0ec; color: var(--muted); }
+.exp-status.decided { background: #eaf3ee; color: #2f5c44; }
+.exp-variants { display: flex; flex-direction: column; }
+.variant-row { padding: 12px 14px; border-top: 1px solid var(--line-soft); transition: background .2s ease; }
+.variant-row:first-child { border-top: none; }
+.variant-row.winner { background: linear-gradient(0deg, #f3faf6, #f3faf6), var(--surface); box-shadow: inset 3px 0 0 #3f7658; }
+.variant-head { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.variant-label { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 6px; background: var(--ink); color: #fff; font-size: 11px; font-weight: 700; }
+.variant-row.winner .variant-label { background: #3f7658; }
+.variant-angle { font-size: 10.5px; font-weight: 700; letter-spacing: .03em; color: var(--faint); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }
+.variant-crown { font-size: 11px; font-weight: 700; color: #3f7658; }
+.variant-cvr { margin-left: auto; font-size: 11.5px; font-weight: 700; color: var(--ink); }
+.variant-title { font-size: 13.5px; font-weight: 600; line-height: 1.5; color: var(--ink); }
+.variant-hook { margin-top: 2px; font-size: 12px; color: var(--muted); line-height: 1.5; }
+.variant-metrics { display: flex; align-items: flex-end; gap: 8px; margin-top: 9px; }
+.variant-metrics label { display: flex; flex-direction: column; gap: 3px; font-size: 10.5px; font-weight: 600; color: var(--faint); }
+.variant-metrics input { width: 78px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface-strong); font-size: 12.5px; }
+.variant-save { padding: 6px 14px; border: 1px solid var(--ink); border-radius: 8px; background: var(--ink); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; transition: .15s; }
+.variant-save:hover:not(:disabled) { background: #000; }
+.variant-save:disabled { opacity: .5; cursor: default; }

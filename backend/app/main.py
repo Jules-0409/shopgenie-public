@@ -22,10 +22,16 @@ from app.workspace import (
     AgentTask,
     ContentAsset,
     ContentVersion,
+    Experiment,
     KnowledgeSource,
     PerformanceRecord,
     Product,
     add_content_version,
+    compute_winner,
+    delete_experiment,
+    get_experiment,
+    list_experiments,
+    save_experiment,
     complete_agent_task,
     create_agent_task,
     create_content_asset,
@@ -47,6 +53,7 @@ from app.workspace import (
 )
 from app.workspace_context import learn_product_from_message
 from app.review_mining import analyze_reviews
+from app.ab_testing import generate_variants
 
 logging.basicConfig(
     level=logging.INFO,
@@ -231,6 +238,65 @@ async def api_clear_reviews(product_id: str) -> Product:
         raise HTTPException(status_code=404, detail="商品不存在")
     product.review_insights = None
     return await run_in_threadpool(save_product, product)
+
+
+# ── A/B 实验：变体生成 → 效果录入 → 赢家反哺 ──
+
+class ExperimentGenerateInput(BaseModel):
+    product_id: str | None = None
+    platform: Platform = Platform.XHS
+    brief: str = Field(default="", max_length=2000)
+    n: int = Field(default=3, ge=2, le=5)
+
+
+class VariantMetricsInput(BaseModel):
+    label: str = Field(min_length=1, max_length=4)
+    impressions: int = Field(default=0, ge=0)
+    clicks: int = Field(default=0, ge=0)
+    conversions: int = Field(default=0, ge=0)
+
+
+@app.get("/api/experiments", response_model=list[Experiment])
+async def api_list_experiments(product_id: str | None = None) -> list[Experiment]:
+    return await run_in_threadpool(list_experiments, product_id)
+
+
+@app.post("/api/experiments/generate", response_model=Experiment)
+async def api_generate_experiment(req: ExperimentGenerateInput, settings: Settings = Depends(get_settings)) -> Experiment:
+    if req.platform == Platform.STUDIO:
+        raise HTTPException(status_code=422, detail="商品图工作室不支持 A/B 实验")
+    product = await run_in_threadpool(get_product, req.product_id) if req.product_id else None
+    if req.product_id and not product:
+        raise HTTPException(status_code=404, detail="商品不存在")
+    try:
+        variants = await generate_variants(product, req.platform.value, req.brief, settings, req.n)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except DeepSeekError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    name = (product.name if product else req.brief[:20]) or "未命名实验"
+    experiment = Experiment(product_id=req.product_id, platform=req.platform.value, name=name, brief=req.brief, variants=variants)
+    return await run_in_threadpool(save_experiment, experiment)
+
+
+@app.post("/api/experiments/{experiment_id}/metrics", response_model=Experiment)
+async def api_record_variant_metrics(experiment_id: str, req: VariantMetricsInput) -> Experiment:
+    experiment = await run_in_threadpool(get_experiment, experiment_id)
+    if not experiment:
+        raise HTTPException(status_code=404, detail="实验不存在")
+    variant = next((v for v in experiment.variants if v.get("label") == req.label), None)
+    if not variant:
+        raise HTTPException(status_code=404, detail="变体不存在")
+    variant["impressions"] = req.impressions
+    variant["clicks"] = req.clicks
+    variant["conversions"] = req.conversions
+    compute_winner(experiment)
+    return await run_in_threadpool(save_experiment, experiment)
+
+
+@app.delete("/api/experiments/{experiment_id}")
+async def api_delete_experiment(experiment_id: str) -> dict[str, bool]:
+    return {"deleted": await run_in_threadpool(delete_experiment, experiment_id)}
 
 
 @app.get("/api/content", response_model=list[ContentAsset])
