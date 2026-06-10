@@ -20,6 +20,7 @@ function renderPlaceholder(text: string) {
 const PlatformIcon = ({ platform }: { platform: Platform }) => {
   if (platform === 'xhs') return <XhsMark />;
   if (platform === 'dy') return <DyMark />;
+  if (platform === 'cs') return <span style={{ fontSize: 18 }}>💬</span>;
   return <AmazonMark />;
 };
 
@@ -142,6 +143,31 @@ const AmazonPreview = ({ card, image, dragOver, onDragOver, onDragLeave, onDrop 
   </div>
 );
 
+/* CS preview — clean card layout, no phone mockup */
+const CSPreview = ({ card }: { card: GeneratedContent }) => (
+  <div className="cs-preview-shell">
+    <div className="cs-intro">
+      <p>{card.body}</p>
+    </div>
+    <div className="cs-scenarios">
+      {card.sections.map((section) => (
+        <div className="cs-scenario-card" key={section.label}>
+          <div className="cs-scenario-label">{section.label}</div>
+          <div className="cs-scenario-content">
+            {section.content.split('---').map((variant, i) => (
+              <div className="cs-variant" key={i}>
+                {variant.trim().split('\n').map((line, j) => (
+                  <p key={j}>{line}</p>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
 export default function ResultCard({ card, brandName = '你的品牌', onRegenerate, quality, onEdit, warnings }: {
   card: GeneratedContent; brandName?: string; onRegenerate?: () => void; quality?: QualityReport; onEdit?: () => void; warnings?: string[];
 }) {
@@ -167,6 +193,7 @@ export default function ResultCard({ card, brandName = '你的品牌', onRegener
         {card.platform === 'xhs' && <XhsPreview card={card} brandName={brandName} image={image} dragOver={dragOver} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} />}
         {card.platform === 'dy' && <DouyinPreview card={card} brandName={brandName} image={image} dragOver={dragOver} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} />}
         {card.platform === 'amazon' && <AmazonPreview card={card} image={image} dragOver={dragOver} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} />}
+        {card.platform === 'cs' && <CSPreview card={card} />}
       </div>
       {/* 后端强契约保证：校验失败的成品不会到达这里，能渲染即代表结构校验通过 */}
       <footer className="result-footer"><span className="check">✓ 平台结构校验通过</span>{warnings?.some(w => w.includes('自动矫正')) && <span className="check" style={{ color: 'var(--warn, #b45309)' }}>⚠ 已自动矫正一次</span>}{quality && <span className={`quality-pill ${quality.score >= 80 ? 'good' : 'review'}`}>质量 {quality.score}</span>}<span className="tip">生成内容请在发布前核对产品事实</span></footer>
