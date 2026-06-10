@@ -111,16 +111,23 @@ def validate_amazon(content: GeneratedContent) -> ValidationResult:
 
 
 def validate_cs(content: GeneratedContent) -> ValidationResult:
-    """Validate customer service templates."""
+    """Validate customer service templates — sections are the actual content."""
     result = ValidationResult()
 
     if not _is_primarily_chinese(content.title):
         result.errors.append("客服话术标题必须是中文")
         result.valid = False
 
-    if not _is_primarily_chinese(content.body):
-        result.errors.append("客服话术正文必须是中文")
+    # body 是使用说明/元信息，不做语言校验
+    # 核心校验：至少 3 个场景，每个场景有实质内容
+    if len(content.sections) < 3:
+        result.errors.append("客服话术至少需要 3 个场景")
         result.valid = False
+    else:
+        empty_sections = [s.label for s in content.sections if not s.content.strip()]
+        if empty_sections:
+            result.errors.append(f"以下场景内容为空：{', '.join(empty_sections)}")
+            result.valid = False
 
     return result
 
