@@ -1,5 +1,7 @@
 import logging
 import json
+import re
+from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -15,6 +17,11 @@ from app.workspace_context import build_knowledge_prompt, build_performance_prom
 from app.competitive_analysis import search_competitors, build_competitive_context
 
 logger = logging.getLogger(__name__)
+
+
+def _fix_trailing_commas(text: str) -> str:
+    """Remove trailing commas before ] or } that break JSON parsing."""
+    return re.sub(r",\s*([}\]])", r"\1", text)
 
 
 class DeepSeekError(RuntimeError):
@@ -202,14 +209,27 @@ class DeepSeekClient:
                 logger.error("DeepSeek 返回结构不完整: %s | parsed keys: %s", exc, list(parsed.keys()))
                 raise DeepSeekError("DeepSeek 返回的成品结构不完整") from exc
             return str(parsed.get("message", "已生成可直接使用的内容。")).strip(), result
-        # 未知 kind：记录日志后降级为闲聊，避免炸用户
-        logger.warning("DeepSeek 返回未知 kind=%s，降级为闲聊 | preview: %s", kind, content[:200])
+        # 未知 kind：尝试从字段拼成预览卡片，仍不行则降级为闲聊
+        logger.warning("DeepSeek 返回未知 kind=%s，尝试拼装预览卡片", kind)
+        if parsed.get("title") and parsed.get("body"):
+            try:
+                result = GeneratedContent(
+                    platform=request.platform,
+                    title=str(parsed["title"]),
+                    body=str(parsed["body"]),
+                    tags=[str(t) for t in (parsed.get("tags") or []) if t],
+                    sections=[ContentSection.model_validate(s) for s in (parsed.get("sections") or [])],
+                )
+                msg = str(parsed.get("message", "")).strip() or "已生成可直接使用的内容。"
+                return msg, result
+            except (KeyError, TypeError, ValueError) as exc:
+                logger.warning("未知 kind 拼装卡片失败: %s", exc)
         fallback_msg = str(parsed.get("message", "")).strip() or content[:2000]
         return fallback_msg, None
 
     @staticmethod
     def _try_parse_json(content: str) -> dict | None:
-        """Try to parse JSON, stripping markdown code blocks and fixing common issues."""
+        """Try to parse JSON, stripping markdown code blocks and fixing common LLM output issues."""
         text = content.strip()
         # Strip markdown code block wrapping
         if text.startswith("```"):
@@ -218,26 +238,34 @@ class DeepSeekClient:
                 text = text[first_newline + 1:]
             if text.endswith("```"):
                 text = text[:-3].rstrip()
+        strategies: list[Callable[[str], str]] = [
+            lambda s: s,                                                    # direct
+            _fix_trailing_commas,                                           # ,] ,}
+            lambda s: s.replace("'", '"'),                                  # single→double quotes
+            lambda s: _fix_trailing_commas(s.replace("'", '"')),            # single→double + trailing commas
+        ]
         # Direct parse
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass
+        for strategy in strategies:
+            try:
+                return json.loads(strategy(text))
+            except json.JSONDecodeError:
+                continue
         # Try to find JSON object in the text
         start = text.find("{")
         if start != -1:
-            # Try progressively shorter substrings (handles truncated JSON)
-            for end in range(len(text), start, -1):
-                if text[end - 1] == "}":
-                    try:
-                        return json.loads(text[start:end])
-                    except json.JSONDecodeError:
-                        continue
-            # Last resort: try the text from first { onwards
-            try:
-                return json.loads(text[start:])
-            except json.JSONDecodeError:
-                pass
+            for strategy in strategies:
+                for end in range(len(text), start, -1):
+                    if text[end - 1] == "}":
+                        try:
+                            return json.loads(strategy(text[start:end]))
+                        except json.JSONDecodeError:
+                            continue
+            # Last resort: from first { onwards, try each strategy
+            for strategy in strategies:
+                try:
+                    return json.loads(strategy(text[start:]))
+                except json.JSONDecodeError:
+                    continue
         return None
 
     def _parse_title(self, content: str) -> str | None:
