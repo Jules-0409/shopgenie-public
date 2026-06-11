@@ -148,6 +148,16 @@ export interface GeneratedContent {
   sections: ContentSection[];
 }
 
+export interface BatchResultItem {
+  platform: Platform;
+  message: string | null;
+  result: GeneratedContent | null;
+  asset_id: string | null;
+  quality: QualityReport | null;
+  warnings: string[] | null;
+  error: string | null;
+}
+
 export interface UserProfile {
   brand_name: string;
   category: string;
@@ -294,6 +304,9 @@ export const recordVariantMetrics = (experimentId: string, m: { label: string; i
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(m),
 });
 export const deleteExperiment = (experimentId: string) => requestJson<{ deleted: boolean }>(`/shopgenie/api/experiments/${experimentId}`, { method: 'DELETE' });
+export const batchGenerate = (input: { product_id: string | null; brief: string; platforms: Platform[] }) => requestJson<BatchResultItem[]>('/shopgenie/api/batch/generate', {
+  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+});
 export const listContentAssets = () => requestJson<ContentAsset[]>('/shopgenie/api/content');
 export const listContentVersions = (assetId: string) => requestJson<ContentVersion[]>(`/shopgenie/api/content/${assetId}/versions`);
 export const addContentVersion = (assetId: string, content: GeneratedContent, changeNote: string) => requestJson<ContentVersion>(`/shopgenie/api/content/${assetId}/versions`, {

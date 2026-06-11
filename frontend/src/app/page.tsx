@@ -9,6 +9,7 @@ import Sidebar, { type ConversationSummary } from '@/components/Sidebar';
 import WelcomeScreen from '@/components/WelcomeScreen';
 import WorkspacePanel, { type WorkspaceTab } from '@/components/WorkspacePanel';
 import StudioView from '@/components/StudioView';
+import BatchView from '@/components/BatchView';
 import { PLATFORM_LABELS, type Platform } from '@/lib/platforms';
 import { getProfile, listProducts, type Product, type UserProfile } from '@/lib/api';
 import { useChat, DEMO_CONVERSATION } from '@/hooks/useChat';
@@ -24,7 +25,7 @@ const starterText: Record<Platform, string> = {
 export default function Home() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [draft, setDraft] = useState('');
-  const [view, setView] = useState<'chat' | 'welcome' | 'studio'>('chat');
+  const [view, setView] = useState<'chat' | 'welcome' | 'studio' | 'batch'>('chat');
   const [profileOpen, setProfileOpen] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -136,6 +137,18 @@ export default function Home() {
             </header>
             <StudioView chat={chat} />
           </>
+        ) : view === 'batch' ? (
+          <>
+            <header className="topbar">
+              <div className="topbar-inner">
+                <button aria-label="打开导航" className="icon-button mobile-menu" onClick={() => setMobileNavOpen(true)}><BrandMark s={18} /></button>
+                <span className="platform-pill">🚀 批量生成</span>
+                <span className="topbar-title">一键全平台</span>
+                <button className="icon-button" style={{ marginLeft: 'auto', fontSize: 13, width: 'auto', padding: '0 10px' }} onClick={newChat}>← 返回</button>
+              </div>
+            </header>
+            <BatchView profile={profile} />
+          </>
         ) : (
           <>
             <header className="topbar">
@@ -173,7 +186,7 @@ export default function Home() {
                   })}
                 </div>
               </div>
-            ) : <WelcomeScreen onSelect={startFromPlatform} profile={profile} onProfileOpen={() => setProfileOpen(true)} onOpenWorkspace={(tab) => { setWorkspaceAssetId(null); setWorkspaceTab(tab); setWorkspaceOpen(true); }} />}
+            ) : <WelcomeScreen onSelect={startFromPlatform} profile={profile} onProfileOpen={() => setProfileOpen(true)} onOpenWorkspace={(tab) => { setWorkspaceAssetId(null); setWorkspaceTab(tab); setWorkspaceOpen(true); }} onBatch={() => { chat.setActiveId(null); setPendingPlatform(null); setView('batch'); }} />}
 
             {view === 'chat' && (chat.activeConversation || pendingPlatform) && (
               <>

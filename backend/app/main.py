@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import uuid
@@ -297,6 +298,52 @@ async def api_record_variant_metrics(experiment_id: str, req: VariantMetricsInpu
 @app.delete("/api/experiments/{experiment_id}")
 async def api_delete_experiment(experiment_id: str) -> dict[str, bool]:
     return {"deleted": await run_in_threadpool(delete_experiment, experiment_id)}
+
+
+# ── 批量生成：一个商品一键产出多平台内容 ──
+
+class BatchGenerateInput(BaseModel):
+    product_id: str | None = None
+    brief: str = Field(min_length=1, max_length=500)
+    platforms: list[Platform] = Field(min_length=1, max_length=5)
+
+
+class BatchResultItem(BaseModel):
+    platform: str
+    message: str | None = None
+    result: GeneratedContent | None = None
+    asset_id: str | None = None
+    quality: dict | None = None
+    warnings: list[str] | None = None
+    error: str | None = None
+
+
+@app.post("/api/batch/generate", response_model=list[BatchResultItem])
+async def api_batch_generate(req: BatchGenerateInput, settings: Settings = Depends(get_settings)) -> list[BatchResultItem]:
+    """一个商品/描述并行产出多个平台的内容，各自保存为内容资产。"""
+    platforms = [p for p in dict.fromkeys(req.platforms) if p != Platform.STUDIO]
+    if not platforms:
+        raise HTTPException(status_code=422, detail="请选择至少一个内容平台（不含商品图工作室）")
+    profile = await run_in_threadpool(get_profile)
+    product = await run_in_threadpool(get_product, req.product_id) if req.product_id else None
+    if req.product_id and not product:
+        raise HTTPException(status_code=404, detail="商品不存在")
+
+    async def gen_one(platform: Platform) -> BatchResultItem:
+        try:
+            request = ChatRequest(platform=platform, message=req.brief, history=[], product_id=req.product_id)
+            response = await DeepSeekClient(settings, profile=profile, product=product).chat(request)
+            asset_id = None
+            quality = None
+            if response.result is not None:
+                asset, version = await run_in_threadpool(create_content_asset, response.result, req.product_id, response.warnings)
+                asset_id = asset.id
+                quality = version.quality
+            return BatchResultItem(platform=platform.value, message=response.message, result=response.result, asset_id=asset_id, quality=quality, warnings=response.warnings)
+        except DeepSeekError as exc:
+            return BatchResultItem(platform=platform.value, error=str(exc))
+
+    return list(await asyncio.gather(*[gen_one(p) for p in platforms]))
 
 
 @app.get("/api/content", response_model=list[ContentAsset])

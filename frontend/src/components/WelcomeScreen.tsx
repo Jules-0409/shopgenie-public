@@ -122,7 +122,7 @@ function OperationsHub({ onOpen }: { onOpen?: (tab: WorkspaceTab) => void }) {
   );
 }
 
-export default function WelcomeScreen({ onSelect, profile, onProfileOpen, onOpenWorkspace }: { onSelect: (platform: Platform, title: string) => void; profile: UserProfile | null; onProfileOpen?: () => void; onOpenWorkspace?: (tab: WorkspaceTab) => void }) {
+export default function WelcomeScreen({ onSelect, profile, onProfileOpen, onOpenWorkspace, onBatch }: { onSelect: (platform: Platform, title: string) => void; profile: UserProfile | null; onProfileOpen?: () => void; onOpenWorkspace?: (tab: WorkspaceTab) => void; onBatch?: () => void }) {
   const brandName = profile?.brand_name || '你的品牌';
   const memoryItems = profile
     ? [profile.brand_name, profile.category, profile.tone, ...profile.style_preferences].filter(Boolean).slice(0, 4)
@@ -150,6 +150,16 @@ export default function WelcomeScreen({ onSelect, profile, onProfileOpen, onOpen
             </button>
           ))}
         </div>
+        {onBatch && (
+          <button className="batch-cta" onClick={onBatch}>
+            <span className="batch-cta-icon">🚀</span>
+            <div className="batch-cta-copy">
+              <strong>一键全平台批量生成</strong>
+              <span>选一个商品，同时产出小红书、抖音、Amazon 多平台内容</span>
+            </div>
+            <span className="batch-cta-arrow">→</span>
+          </button>
+        )}
         <OperationsHub onOpen={onOpenWorkspace} />
         <div className="scenario-section">
           <div className="scenario-label">更多场景</div>
