@@ -34,6 +34,7 @@ def test_workspace_api_flow(tmp_path: Path) -> None:
         products = client.get("/api/products")
         sources = client.get("/api/knowledge")
         metrics = client.get("/api/performance")
+        operations = client.get("/api/operations/brief")
 
     assert product.status_code == 200
     assert source.status_code == 200
@@ -41,6 +42,41 @@ def test_workspace_api_flow(tmp_path: Path) -> None:
     assert products.json()[0]["name"] == "轻量保温杯"
     assert sources.json()[0]["title"] == "小红书规则"
     assert metrics.json()[0]["conversions"] == 8
+    assert operations.status_code == 200
+    assert operations.json()["actions"]
+
+
+def test_performance_csv_api_preview_then_import(tmp_path: Path) -> None:
+    memory.DB_PATH = tmp_path / "workspace.db"
+    with TestClient(app) as client:
+        asset = create_content_asset(GeneratedContent(
+            platform=Platform.XHS,
+            title="测试内容",
+            body="完整正文" * 30,
+            tags=["测试", "内容", "运营"],
+        ))[0]
+        csv_text = f"asset_id,impressions,clicks,orders,revenue,ad_spend\n{asset.id},1000,80,6,600,120\n"
+        preview = client.post("/api/performance/import/preview", json={"csv_text": csv_text})
+        before = client.get("/api/performance")
+        imported = client.post("/api/performance/import", json={"csv_text": csv_text})
+        after = client.get("/api/performance")
+
+    assert preview.status_code == 200
+    assert preview.json()["rows"] == 1
+    assert before.json() == []
+    assert imported.json() == {"imported": 1}
+    assert after.json()[0]["orders"] == 6
+
+
+def test_performance_csv_api_rejects_missing_asset(tmp_path: Path) -> None:
+    memory.DB_PATH = tmp_path / "workspace.db"
+    with TestClient(app) as client:
+        response = client.post("/api/performance/import/preview", json={
+            "csv_text": "asset_id,impressions\nmissing,100\n",
+        })
+
+    assert response.status_code == 422
+    assert "不存在" in response.json()["detail"]
 
 
 def test_knowledge_import_saves_original_url(tmp_path: Path, monkeypatch) -> None:

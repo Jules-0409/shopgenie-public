@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ChatBubble from '@/components/ChatBubble';
-import { AmazonMark, BrandMark, DyMark, XhsMark } from '@/components/Icons';
+import { AmazonMark, BrandMark, DyMark, XhsMark, IconComment, IconCamera } from '@/components/Icons';
 import InputBar from '@/components/InputBar';
 import ProfilePanel from '@/components/ProfilePanel';
 import Sidebar, { type ConversationSummary } from '@/components/Sidebar';
@@ -115,8 +115,8 @@ export default function Home() {
     if (p === 'xhs') return <XhsMark />;
     if (p === 'dy') return <DyMark />;
     if (p === 'amazon') return <AmazonMark />;
-    if (p === 'cs') return <span style={{ fontSize: 14 }}>💬</span>;
-    if (p === 'studio') return <span style={{ fontSize: 14 }}>📸</span>;
+    if (p === 'cs') return <IconComment />;
+    if (p === 'studio') return <IconCamera />;
     return null;
   };
 
@@ -142,7 +142,7 @@ export default function Home() {
             <header className="topbar">
               <div className="topbar-inner">
                 <button aria-label="打开导航" className="icon-button mobile-menu" onClick={() => setMobileNavOpen(true)}><BrandMark s={18} /></button>
-                <span className="platform-pill">🚀 批量生成</span>
+                <span className="platform-pill">批量生成</span>
                 <span className="topbar-title">一键全平台</span>
                 <button className="icon-button" style={{ marginLeft: 'auto', fontSize: 13, width: 'auto', padding: '0 10px' }} onClick={newChat}>← 返回</button>
               </div>
@@ -196,7 +196,7 @@ export default function Home() {
                   if (loved.length === 0) return null;
                   return (
                     <button className="ctx-insight-strip" onClick={() => { setWorkspaceAssetId(null); setWorkspaceTab('products'); setWorkspaceOpen(true); }}>
-                      <span className="ctx-insight-tag">💬 正在参考评论洞察</span>
+                      <span className="ctx-insight-tag">正在参考评论洞察</span>
                       <span className="ctx-insight-points">{loved.slice(0, 3).join(' · ')}</span>
                       <span className="ctx-insight-arrow">管理 →</span>
                     </button>

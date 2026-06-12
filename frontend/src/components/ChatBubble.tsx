@@ -41,7 +41,7 @@ function WarningBanner({ warnings }: { warnings: string[] }) {
   if (!warnings.length) return null;
   return (
     <div className="warning-banner">
-      <div className="warning-header">⚠️ 内容检查提醒</div>
+      <div className="warning-header">内容检查提醒</div>
       {warnings.map((w, i) => <div key={i} className="warning-item">{w}</div>)}
     </div>
   );

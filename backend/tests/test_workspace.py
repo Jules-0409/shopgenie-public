@@ -21,6 +21,8 @@ from app.workspace import (
     save_product,
 )
 from app.workspace_context import build_knowledge_prompt, build_performance_prompt, build_product_prompt, learn_product_from_message, retrieve_knowledge
+from app.operations import build_operations_brief
+from app.performance_import import import_performance_csv, preview_performance_csv
 
 
 def use_db(tmp_path: Path) -> None:
@@ -118,3 +120,114 @@ def test_performance_prompt_feeds_back_product_results(tmp_path: Path) -> None:
 
     assert "历史发布效果" in prompt
     assert "转化率 2.5%" in prompt
+
+
+def test_operations_brief_prioritizes_low_click_and_low_conversion(tmp_path: Path) -> None:
+    use_db(tmp_path)
+    product = save_product(Product(name="保温杯", review_insights={"summary": "轻便"}))
+    asset, _ = create_content_asset(content(), product.id)
+    save_performance(PerformanceRecord(
+        asset_id=asset.id,
+        platform="xhs",
+        impressions=1000,
+        clicks=5,
+        conversions=0,
+    ))
+    second = save_performance(PerformanceRecord(
+        asset_id=asset.id,
+        platform="xhs",
+        impressions=500,
+        clicks=100,
+        conversions=1,
+    ))
+
+    brief = build_operations_brief()
+
+    assert brief["status"] == "attention"
+    ids = [action["id"] for action in brief["actions"]]
+    assert any(action_id.startswith("low-click-") for action_id in ids)
+    assert f"low-conversion-{second.id}" in ids
+
+
+def test_operations_brief_has_onboarding_and_healthy_states(tmp_path: Path) -> None:
+    use_db(tmp_path)
+    onboarding = build_operations_brief()
+    assert onboarding["actions"][0]["id"] == "create-first-product"
+
+    product = save_product(Product(name="保温杯", review_insights={"summary": "轻便"}))
+    asset, _ = create_content_asset(content(), product.id)
+    save_performance(PerformanceRecord(
+        asset_id=asset.id,
+        platform="xhs",
+        impressions=1000,
+        clicks=100,
+        conversions=10,
+    ))
+
+    healthy = build_operations_brief()
+    assert healthy["status"] == "healthy"
+    assert healthy["actions"] == []
+
+
+def test_performance_csv_preview_and_import_are_atomic(tmp_path: Path) -> None:
+    use_db(tmp_path)
+    asset, _ = create_content_asset(content())
+    csv_text = (
+        "asset_id,impressions,clicks,add_to_carts,orders,refunds,revenue,ad_spend,notes\n"
+        f"{asset.id},1000,100,20,8,1,800,200,首轮投放\n"
+    )
+
+    preview = preview_performance_csv(csv_text)
+    assert preview["rows"] == 1
+    assert list_performance() == []
+
+    result = import_performance_csv(csv_text)
+    assert result == {"imported": 1}
+    assert list_performance()[0].orders == 8
+
+
+def test_performance_csv_rejects_bad_row_without_partial_write(tmp_path: Path) -> None:
+    use_db(tmp_path)
+    asset, _ = create_content_asset(content())
+    csv_text = (
+        "asset_id,impressions,clicks\n"
+        f"{asset.id},100,10\n"
+        "missing_asset,100,-1\n"
+    )
+
+    try:
+        import_performance_csv(csv_text)
+        raise AssertionError("expected invalid CSV")
+    except ValueError as exc:
+        assert "第 3 行" in str(exc)
+    assert list_performance() == []
+
+
+def test_performance_insights_include_full_funnel(tmp_path: Path) -> None:
+    use_db(tmp_path)
+    save_performance(PerformanceRecord(
+        asset_id="content_1", platform="xhs", impressions=1000, clicks=100,
+        add_to_carts=20, orders=10, conversions=10, refunds=2, revenue=1000, ad_spend=250,
+    ))
+
+    insights = build_performance_insights()
+
+    assert insights["click_rate"] == 10.0
+    assert insights["conversion_rate"] == 1.0
+    assert insights["click_conversion_rate"] == 10.0
+    assert insights["refund_rate"] == 20.0
+    assert insights["roas"] == 4.0
+
+
+def test_operations_brief_flags_high_refund_rate(tmp_path: Path) -> None:
+    use_db(tmp_path)
+    product = save_product(Product(name="保温杯", review_insights={"summary": "轻便"}))
+    asset, _ = create_content_asset(content(), product.id)
+    record = save_performance(PerformanceRecord(
+        asset_id=asset.id, platform="xhs", impressions=1000, clicks=100,
+        orders=20, conversions=20, refunds=5,
+    ))
+
+    ids = [action["id"] for action in build_operations_brief()["actions"]]
+
+    assert f"high-refund-{record.id}" in ids

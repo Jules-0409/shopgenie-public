@@ -94,8 +94,12 @@ class PerformanceRecord:
     impressions: int = 0
     engagements: int = 0
     clicks: int = 0
+    add_to_carts: int = 0
+    orders: int = 0
     conversions: int = 0
+    refunds: int = 0
     revenue: float = 0
+    ad_spend: float = 0
     notes: str = ""
     recorded_at: str = field(default_factory=_now)
 
@@ -376,6 +380,22 @@ def save_performance(record: PerformanceRecord) -> PerformanceRecord:
     return record
 
 
+def save_performance_batch(records: list[PerformanceRecord]) -> None:
+    conn = _connect()
+    try:
+        conn.executemany(
+            "INSERT INTO performance_records (id, asset_id, data, recorded_at) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(id) DO UPDATE SET asset_id = excluded.asset_id, data = excluded.data, recorded_at = excluded.recorded_at",
+            [
+                (record.id, record.asset_id, json.dumps(asdict(record), ensure_ascii=False), record.recorded_at)
+                for record in records
+            ],
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def list_performance(asset_id: str | None = None) -> list[PerformanceRecord]:
     records = _list("performance_records", PerformanceRecord, "recorded_at")
     return [record for record in records if not asset_id or record.asset_id == asset_id]
@@ -384,12 +404,32 @@ def list_performance(asset_id: str | None = None) -> list[PerformanceRecord]:
 def build_performance_insights() -> dict[str, int | float | str]:
     records = list_performance()
     if not records:
-        return {"records": 0, "impressions": 0, "conversions": 0, "conversion_rate": 0, "summary": "发布后录入曝光和转化，ShopGenie 会据此优化下一版内容。"}
+        return {
+            "records": 0, "impressions": 0, "clicks": 0, "add_to_carts": 0, "orders": 0,
+            "conversions": 0, "refunds": 0, "revenue": 0, "ad_spend": 0, "click_rate": 0,
+            "conversion_rate": 0, "click_conversion_rate": 0, "refund_rate": 0, "roas": 0,
+            "summary": "发布后录入完整漏斗数据，ShopGenie 会据此优化下一版内容。",
+        }
     impressions = sum(record.impressions for record in records)
+    clicks = sum(record.clicks for record in records)
+    add_to_carts = sum(record.add_to_carts for record in records)
+    orders = sum(record.orders or record.conversions for record in records)
     conversions = sum(record.conversions for record in records)
-    rate = round(conversions / impressions * 100, 2) if impressions else 0
-    summary = f"已记录 {len(records)} 次发布，累计曝光 {impressions}，转化 {conversions}，整体转化率 {rate}%。"
-    return {"records": len(records), "impressions": impressions, "conversions": conversions, "conversion_rate": rate, "summary": summary}
+    refunds = sum(record.refunds for record in records)
+    revenue = round(sum(record.revenue for record in records), 2)
+    ad_spend = round(sum(record.ad_spend for record in records), 2)
+    click_rate = round(clicks / impressions * 100, 2) if impressions else 0
+    conversion_rate = round(conversions / impressions * 100, 2) if impressions else 0
+    click_conversion_rate = round(orders / clicks * 100, 2) if clicks else 0
+    refund_rate = round(refunds / orders * 100, 2) if orders else 0
+    roas = round(revenue / ad_spend, 2) if ad_spend else 0
+    summary = f"已记录 {len(records)} 次发布，CTR {click_rate}%，点击后成交率 {click_conversion_rate}%，ROAS {roas}。"
+    return {
+        "records": len(records), "impressions": impressions, "clicks": clicks, "add_to_carts": add_to_carts,
+        "orders": orders, "conversions": conversions, "refunds": refunds, "revenue": revenue,
+        "ad_spend": ad_spend, "click_rate": click_rate, "conversion_rate": conversion_rate,
+        "click_conversion_rate": click_conversion_rate, "refund_rate": refund_rate, "roas": roas, "summary": summary,
+    }
 
 
 # ── A/B 实验 ──

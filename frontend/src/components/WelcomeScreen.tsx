@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AmazonMark, DyMark, XhsMark } from './Icons';
-import { getPerformanceInsights, listExperiments, listProducts, type Experiment, type PerformanceInsights, type Product, type UserProfile } from '@/lib/api';
+import { AmazonMark, DyMark, XhsMark, IconComment, IconCamera, IconBox, IconFlask, IconChart } from './Icons';
+import type { ComponentType } from 'react';
+import { getOperationsBrief, getPerformanceInsights, listExperiments, listProducts, type Experiment, type OperationsBrief, type PerformanceInsights, type Product, type UserProfile } from '@/lib/api';
 import type { Platform } from '@/lib/platforms';
 import type { WorkspaceTab } from './WorkspacePanel';
 
@@ -27,18 +28,18 @@ const PLATFORMS = [
   },
 ] satisfies Array<{ platform: Platform; label: string; description: string; badge: string }>;
 
-const SCENARIOS = [
+const SCENARIOS: Array<{ platform: Platform; label: string; description: string; Icon: ComponentType }> = [
   {
-    platform: 'cs' as Platform,
+    platform: 'cs',
     label: '客服话术',
     description: '售前咨询 + 售后处理的标准化回复模板',
-    icon: '💬',
+    Icon: IconComment,
   },
   {
-    platform: 'studio' as Platform,
+    platform: 'studio',
     label: '商品图工作室',
     description: '生成商品三视图 → 调整外观 → 一键换场景',
-    icon: '📸',
+    Icon: IconCamera,
   },
 ];
 
@@ -46,7 +47,7 @@ const PlatformIcon = ({ platform }: { platform: Platform }) => {
   if (platform === 'xhs') return <XhsMark s={18} />;
   if (platform === 'dy') return <DyMark s={18} />;
   if (platform === 'amazon') return <AmazonMark s={18} />;
-  return <span style={{ fontSize: 18 }}>💬</span>;
+  return <IconComment />;
 };
 
 const Preview = ({ platform, brandName }: { platform: Platform; brandName: string }) => {
@@ -79,37 +80,52 @@ const Preview = ({ platform, brandName }: { platform: Platform; brandName: strin
   );
 };
 
-function OperationsHub({ onOpen }: { onOpen?: (tab: WorkspaceTab) => void }) {
+export function OperationsHub({ onOpen }: { onOpen?: (tab: WorkspaceTab) => void }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [insights, setInsights] = useState<PerformanceInsights | null>(null);
+  const [brief, setBrief] = useState<OperationsBrief | null>(null);
 
   useEffect(() => {
     listProducts().then(setProducts).catch(() => undefined);
     listExperiments().then(setExperiments).catch(() => undefined);
     getPerformanceInsights().then(setInsights).catch(() => undefined);
+    getOperationsBrief().then(setBrief).catch(() => undefined);
   }, []);
 
   const analyzed = products.filter((p) => p.review_insights).length;
   const running = experiments.filter((e) => e.status === 'running').length;
   const decided = experiments.filter((e) => e.status === 'decided').length;
 
-  const cards: Array<{ tab: WorkspaceTab; icon: string; label: string; stat: string; hint: string }> = [
-    { tab: 'products', icon: '📦', label: '商品库', stat: `${products.length} 个商品`, hint: analyzed > 0 ? `${analyzed} 个已分析评论` : '粘贴买家评价，反哺生成' },
-    { tab: 'experiments', icon: '🧪', label: 'A/B 实验', stat: running + decided > 0 ? `${running} 投放中 · ${decided} 已决出` : '还没有实验', hint: '标题/钩子变体竞速找赢家' },
-    { tab: 'performance', icon: '📈', label: '效果洞察', stat: insights && insights.records > 0 ? `转化率 ${insights.conversion_rate}%` : '暂无数据', hint: insights && insights.records > 0 ? `${insights.records} 次发布回流` : '录入曝光转化，优化下一版' },
+  const cards: Array<{ tab: WorkspaceTab; Icon: ComponentType; label: string; stat: string; hint: string }> = [
+    { tab: 'products', Icon: IconBox, label: '商品库', stat: `${products.length} 个商品`, hint: analyzed > 0 ? `${analyzed} 个已分析评论` : '粘贴买家评价，反哺生成' },
+    { tab: 'experiments', Icon: IconFlask, label: 'A/B 实验', stat: running + decided > 0 ? `${running} 投放中 · ${decided} 已决出` : '还没有实验', hint: '标题/钩子变体竞速找赢家' },
+    { tab: 'performance', Icon: IconChart, label: '效果洞察', stat: insights && insights.records > 0 ? `转化率 ${insights.conversion_rate}%` : '暂无数据', hint: insights && insights.records > 0 ? `${insights.records} 次发布回流` : '录入曝光转化，优化下一版' },
   ];
 
   return (
     <div className="ops-hub">
       <div className="ops-hub-head">
-        <span className="scenario-label">你的运营台</span>
-        <span className="ops-hub-sub">内容只是起点 — 评论反哺、A/B 实验、效果回流让它越用越准</span>
+        <div>
+          <span className="scenario-label">今日运营指挥台</span>
+          <span className="ops-hub-sub">{brief?.summary ?? '正在诊断商品、内容与投放数据…'}</span>
+        </div>
+        {brief && <span className={`ops-health ${brief.status}`}>{brief.status === 'healthy' ? '状态良好' : brief.status === 'attention' ? '需要关注' : '稳步推进'}</span>}
       </div>
+      {brief && brief.actions.length > 0 && <div className="ops-action-list">{brief.actions.map((action, index) => (
+        <button className={`ops-action ${action.priority}`} key={action.id} onClick={() => onOpen?.(action.target_tab)}>
+          <span className="ops-action-index">{String(index + 1).padStart(2, '0')}</span>
+          <span className="ops-action-copy"><strong>{action.title}</strong><span>{action.reason}</span></span>
+          <span className="ops-action-metric">{action.metric}</span>
+          <span className="ops-card-arrow">→</span>
+        </button>
+      ))}</div>}
+      {brief?.status === 'healthy' && <div className="ops-healthy-note">继续发布内容并回填真实数据，ShopGenie 会在出现异常信号时提醒你。</div>}
+      <div className="ops-hub-divider"><span>运营资产</span></div>
       <div className="ops-hub-grid">
         {cards.map((c) => (
           <button className="ops-card" key={c.tab} onClick={() => onOpen?.(c.tab)}>
-            <span className="ops-card-icon">{c.icon}</span>
+            <span className="ops-card-icon"><c.Icon /></span>
             <div className="ops-card-body">
               <div className="ops-card-top"><strong>{c.label}</strong><span className="ops-card-stat">{c.stat}</span></div>
               <span className="ops-card-hint">{c.hint}</span>
@@ -131,14 +147,18 @@ export default function WelcomeScreen({ onSelect, profile, onProfileOpen, onOpen
   return (
     <div className="welcome dot-grid">
       <div className="platform-picker">
+        <div className="welcome-masthead">
+          <span className="mh-brand">ShopGenie — AI Commerce Studio</span>
+          <span className="mh-folio">№ 001 · 电商内容工作室</span>
+        </div>
         <div className="welcome-eyebrow">Choose a publishing destination</div>
-        <h1 className="welcome-title">准备为哪个平台创作？</h1>
+        <h1 className="welcome-title">准备为<span className="accent">哪个平台</span>创作？</h1>
         <p className="welcome-sub">每个平台使用独立的内容结构和规则。选择后，ShopGenie 会在这次对话中保持平台一致。</p>
         <div className="platform-preview-grid">
-          {PLATFORMS.map((item) => (
+          {PLATFORMS.map((item, i) => (
             <button className={`platform-preview-card ${item.platform}`} key={item.platform} onClick={() => onSelect(item.platform, item.label)}>
               <div className="platform-preview-head">
-                <span className="preview-icon"><PlatformIcon platform={item.platform} /></span>
+                <span className="preview-icon" data-folio={String(i + 1).padStart(2, '0')}><PlatformIcon platform={item.platform} /></span>
                 <span className="preview-badge">{item.badge}</span>
               </div>
               <Preview platform={item.platform} brandName={brandName} />
@@ -152,7 +172,6 @@ export default function WelcomeScreen({ onSelect, profile, onProfileOpen, onOpen
         </div>
         {onBatch && (
           <button className="batch-cta" onClick={onBatch}>
-            <span className="batch-cta-icon">🚀</span>
             <div className="batch-cta-copy">
               <strong>一键全平台批量生成</strong>
               <span>选一个商品，同时产出小红书、抖音、Amazon 多平台内容</span>
@@ -166,7 +185,7 @@ export default function WelcomeScreen({ onSelect, profile, onProfileOpen, onOpen
           <div className="scenario-grid">
             {SCENARIOS.map((item) => (
               <button className="scenario-card" key={item.platform} onClick={() => onSelect(item.platform, item.label)}>
-                <span className="scenario-icon">{item.icon}</span>
+                <span className="scenario-icon"><item.Icon /></span>
                 <div className="scenario-copy">
                   <strong>{item.label}</strong>
                   <span>{item.description}</span>

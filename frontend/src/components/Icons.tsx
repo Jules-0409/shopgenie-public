@@ -71,6 +71,24 @@ export const IconCamera = () => (
   </svg>
 );
 
+export const IconBox = ({ s = 18 }: { s?: number }) => (
+  <svg width={s} height={s} viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinejoin="round">
+    <path d="M21 8l-9-5-9 5v8l9 5 9-5z" /><path d="M3 8l9 5 9-5M12 13v8" />
+  </svg>
+);
+
+export const IconFlask = ({ s = 18 }: { s?: number }) => (
+  <svg width={s} height={s} viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinejoin="round" strokeLinecap="round">
+    <path d="M9 3h6M10 3v6L4.5 18a1.8 1.8 0 001.6 2.7h11.8A1.8 1.8 0 0019.5 18L14 9V3" /><path d="M7.2 14h9.6" />
+  </svg>
+);
+
+export const IconChart = ({ s = 18 }: { s?: number }) => (
+  <svg width={s} height={s} viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 3v18h18" /><path d="M7 14l3.5-4 3 2.5L21 6" />
+  </svg>
+);
+
 export const IconHeart = () => (
   <svg width="19" height="19" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.7" fill="none">
     <path d="M20.8 4.6a5.5 5.5 0 00-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 00-7.8 7.8l1 1.1L12 21l7.8-7.4 1-1.1a5.5 5.5 0 000-7.8z" />

@@ -121,8 +121,12 @@ export interface PerformanceRecord {
   impressions: number;
   engagements: number;
   clicks: number;
+  add_to_carts: number;
+  orders: number;
   conversions: number;
+  refunds: number;
   revenue: number;
+  ad_spend: number;
   notes: string;
   recorded_at: string;
 }
@@ -130,9 +134,42 @@ export interface PerformanceRecord {
 export interface PerformanceInsights {
   records: number;
   impressions: number;
+  clicks: number;
+  add_to_carts: number;
+  orders: number;
   conversions: number;
+  refunds: number;
+  revenue: number;
+  ad_spend: number;
+  click_rate: number;
   conversion_rate: number;
+  click_conversion_rate: number;
+  refund_rate: number;
+  roas: number;
   summary: string;
+}
+
+export interface PerformanceCsvPreview {
+  valid: true;
+  rows: number;
+  preview: PerformanceRecord[];
+}
+
+export interface OperationsAction {
+  id: string;
+  priority: 'high' | 'medium' | 'low';
+  title: string;
+  reason: string;
+  metric: string;
+  target_tab: 'products' | 'content' | 'experiments' | 'knowledge' | 'tasks' | 'performance' | 'scene';
+  product_id: string | null;
+  asset_id: string | null;
+}
+
+export interface OperationsBrief {
+  status: 'healthy' | 'steady' | 'attention';
+  summary: string;
+  actions: OperationsAction[];
 }
 
 export interface ContentSection {
@@ -292,6 +329,9 @@ export const listProducts = () => requestJson<Product[]>('/shopgenie/api/product
 export const createProduct = (product: Omit<Product, 'id' | 'created_at' | 'updated_at'>) => requestJson<Product>('/shopgenie/api/products', {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(product),
 });
+export const updateProduct = (productId: string, product: Omit<Product, 'id' | 'created_at' | 'updated_at' | 'review_insights'>) => requestJson<Product>(`/shopgenie/api/products/${productId}`, {
+  method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(product),
+});
 export const analyzeReviews = (productId: string, reviews: string) => requestJson<Product>(`/shopgenie/api/products/${productId}/reviews/analyze`, {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reviews }),
 });
@@ -331,8 +371,15 @@ export const runAgentTask = (objective: string, assetId: string) => requestJson<
 });
 export const listPerformance = () => requestJson<PerformanceRecord[]>('/shopgenie/api/performance');
 export const getPerformanceInsights = () => requestJson<PerformanceInsights>('/shopgenie/api/performance/insights');
+export const getOperationsBrief = () => requestJson<OperationsBrief>('/shopgenie/api/operations/brief');
 export const createPerformance = (record: Omit<PerformanceRecord, 'id' | 'recorded_at'>) => requestJson<PerformanceRecord>('/shopgenie/api/performance', {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(record),
+});
+export const previewPerformanceCsv = (csvText: string) => requestJson<PerformanceCsvPreview>('/shopgenie/api/performance/import/preview', {
+  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ csv_text: csvText }),
+});
+export const importPerformanceCsv = (csvText: string) => requestJson<{ imported: number }>('/shopgenie/api/performance/import', {
+  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ csv_text: csvText }),
 });
 
 export interface StoredSession {

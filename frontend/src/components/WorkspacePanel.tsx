@@ -26,6 +26,7 @@ import {
   listTasks,
   reviseContent,
   runAgentTask,
+  updateProduct,
   type AgentTask,
   type ContentAsset,
   type ContentVersion,
@@ -42,6 +43,7 @@ import { toast } from '@/lib/toast';
 import { PLATFORM_LABELS, type Platform } from '@/lib/platforms';
 import { useEscClose } from '@/hooks/useEscClose';
 import VersionDiff from './VersionDiff';
+import PerformanceCsvImport from './PerformanceCsvImport';
 
 export type WorkspaceTab = 'products' | 'content' | 'experiments' | 'knowledge' | 'tasks' | 'performance' | 'scene';
 type Tab = WorkspaceTab;
@@ -122,7 +124,7 @@ export default function WorkspacePanel({ open, onClose, activeProductId, onActiv
         </header>
         <nav className="workspace-tabs">
           {([
-            ['products', '商品库'], ['content', '内容资产'], ['experiments', '🧪 A/B 实验'], ['knowledge', '知识来源'], ['tasks', 'Agent 任务'], ['performance', '效果数据'], ['scene', '📸 场景'],
+            ['products', '商品库'], ['content', '内容资产'], ['experiments', 'A/B 实验'], ['knowledge', '知识来源'], ['tasks', 'Agent 任务'], ['performance', '效果数据'], ['scene', '场景'],
           ] as [Tab, string][]).map(([value, label]) => <button className={tab === value ? 'active' : ''} key={value} onClick={() => setTab(value)}>{label}</button>)}
         </nav>
         {error && <div className="workspace-error">{error}</div>}
@@ -140,45 +142,77 @@ export default function WorkspacePanel({ open, onClose, activeProductId, onActiv
   );
 }
 
-function ProductsTab({ products, activeProductId, onSelect, onCreated }: {
+export function ProductsTab({ products, activeProductId, onSelect, onCreated }: {
   products: Product[]; activeProductId: string | null; onSelect: (id: string | null) => void; onCreated: () => Promise<void>;
 }) {
-  const [name, setName] = useState('');
-  const [category, setCategory] = useState('');
-  const [sellingPoints, setSellingPoints] = useState('');
-  const [facts, setFacts] = useState('');
-  const [prohibited, setProhibited] = useState('');
+  const [editingId, setEditingId] = useState<string | 'new' | null>(activeProductId);
+  const selected = editingId === 'new' ? null : products.find((product) => product.id === editingId) ?? null;
 
-  const create = async () => {
-    if (!name.trim()) return;
-    const product = await createProduct({
-      name: name.trim(), category: category.trim(), audience: '', selling_points: split(sellingPoints),
-      facts: split(facts), prohibited_claims: split(prohibited), notes: '',
-    });
-    setName(''); setCategory(''); setSellingPoints(''); setFacts(''); setProhibited('');
-    onSelect(product.id);
-    await onCreated();
+  const selectProduct = (productId: string) => {
+    setEditingId(productId);
+    onSelect(productId);
+  };
+
+  const beginCreate = () => {
+    setEditingId('new');
   };
 
   return (
     <div className="workspace-grid">
       <div className="workspace-list">
-        <div className="workspace-section-title">当前生成使用的商品</div>
-        <button className={!activeProductId ? 'workspace-list-item selected' : 'workspace-list-item'} onClick={() => onSelect(null)}><strong>不指定商品</strong><span>仅使用当前对话信息</span></button>
-        {products.map((product) => <button className={`workspace-list-item ${activeProductId === product.id ? 'selected' : ''}`} key={product.id} onClick={() => onSelect(product.id)}><strong>{product.name}</strong><span>{product.category || '未填写品类'} · {product.facts.length} 条事实</span></button>)}
+        <div className="product-list-head"><div className="workspace-section-title">商品库</div><button onClick={beginCreate}>+ 新建商品</button></div>
+        <button className={!activeProductId ? 'workspace-list-item active-context' : 'workspace-list-item'} onClick={() => { setEditingId(null); onSelect(null); }}><strong>不指定商品</strong><span>仅使用当前对话信息</span></button>
+        {products.map((product) => <button className={`workspace-list-item ${editingId === product.id ? 'selected' : ''} ${activeProductId === product.id ? 'active-context' : ''}`} key={product.id} onClick={() => selectProduct(product.id)}><strong>{product.name}</strong><span>{product.category || '未填写品类'} · {product.facts.length} 条事实{activeProductId === product.id ? ' · 正在用于生成' : ''}</span></button>)}
       </div>
-      <div className="workspace-editor">
-        <div className="workspace-section-title">新建商品事实卡</div>
-        <label>商品名<input value={name} onChange={(event) => setName(event.target.value)} placeholder="轻量保温杯" /></label>
-        <label>品类<input value={category} onChange={(event) => setCategory(event.target.value)} placeholder="家居用品" /></label>
-        <label>核心卖点<textarea value={sellingPoints} onChange={(event) => setSellingPoints(event.target.value)} placeholder="轻量、单手开盖" /></label>
-        <label>已确认事实<textarea value={facts} onChange={(event) => setFacts(event.target.value)} placeholder="容量 500ml、杯身 230g" /></label>
-        <label>禁止声明<textarea value={prohibited} onChange={(event) => setProhibited(event.target.value)} placeholder="永不漏水、保温 48 小时" /></label>
-        <button className="workspace-primary" disabled={!name.trim()} onClick={create}>保存并用于生成</button>
-        <ReviewMiningPanel product={products.find((item) => item.id === activeProductId) ?? null} onChanged={onCreated} />
-      </div>
+      {editingId === 'new'
+        ? <ProductEditor mode="new" onSaved={async (product) => { onSelect(product.id); setEditingId(product.id); await onCreated(); }} />
+        : selected
+          ? <ProductEditor key={selected.updated_at} mode="edit" product={selected} onSaved={async () => { await onCreated(); }} />
+          : <div className="workspace-editor product-detail-empty"><strong>选择一个商品查看详情</strong><span>右侧会展示商品事实、卖点、禁用声明和评论洞察。需要新增商品时，点击左上角「+ 新建商品」。</span></div>}
     </div>
   );
+}
+
+function ProductEditor({ mode, product, onSaved }: { mode: 'new' | 'edit'; product?: Product; onSaved: (product: Product) => Promise<void> }) {
+  const [name, setName] = useState(product?.name ?? '');
+  const [category, setCategory] = useState(product?.category ?? '');
+  const [audience, setAudience] = useState(product?.audience ?? '');
+  const [sellingPoints, setSellingPoints] = useState(product?.selling_points.join('、') ?? '');
+  const [facts, setFacts] = useState(product?.facts.join('、') ?? '');
+  const [prohibited, setProhibited] = useState(product?.prohibited_claims.join('、') ?? '');
+  const [notes, setNotes] = useState(product?.notes ?? '');
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    if (!name.trim() || saving) return;
+    setSaving(true);
+    try {
+      const payload = {
+        name: name.trim(), category: category.trim(), audience: audience.trim(), selling_points: split(sellingPoints),
+        facts: split(facts), prohibited_claims: split(prohibited), notes: notes.trim(),
+      };
+      const saved = mode === 'new' ? await createProduct(payload) : await updateProduct(product!.id, payload);
+      toast(mode === 'new' ? '商品已创建并用于生成' : '商品详情已保存', 'success');
+      await onSaved(saved);
+    } catch (error) {
+      toast(error instanceof Error ? error.message : '商品保存失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return <div className="workspace-editor product-detail">
+    <div className="product-detail-head"><div><span>{mode === 'new' ? 'Create product' : 'Product details'}</span><h3>{mode === 'new' ? '新建商品事实卡' : product?.name}</h3></div>{mode === 'edit' && <span className="active-product-status">正在用于生成</span>}</div>
+    <label>商品名<input value={name} onChange={(event) => setName(event.target.value)} placeholder="轻量保温杯" /></label>
+    <label>品类<input value={category} onChange={(event) => setCategory(event.target.value)} placeholder="家居用品" /></label>
+    <label>目标人群<input value={audience} onChange={(event) => setAudience(event.target.value)} placeholder="城市通勤人群" /></label>
+    <label>核心卖点<textarea value={sellingPoints} onChange={(event) => setSellingPoints(event.target.value)} placeholder="轻量、单手开盖" /></label>
+    <label>已确认事实<textarea value={facts} onChange={(event) => setFacts(event.target.value)} placeholder="容量 500ml、杯身 230g" /></label>
+    <label>禁止声明<textarea value={prohibited} onChange={(event) => setProhibited(event.target.value)} placeholder="永不漏水、保温 48 小时" /></label>
+    <label>运营备注<textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="适合秋冬通勤内容" /></label>
+    <button className="workspace-primary" disabled={!name.trim() || saving} onClick={save}>{saving ? '保存中…' : mode === 'new' ? '创建并用于生成' : '保存商品详情'}</button>
+    {mode === 'edit' && <ReviewMiningPanel product={product ?? null} onChanged={() => onSaved(product!)} />}
+  </div>;
 }
 
 function ReviewMiningPanel({ product, onChanged }: { product: Product | null; onChanged: () => Promise<void> }) {
@@ -189,7 +223,7 @@ function ReviewMiningPanel({ product, onChanged }: { product: Product | null; on
   if (!product) {
     return (
       <div className="review-mining">
-        <div className="workspace-section-title">💬 评论反哺</div>
+        <div className="workspace-section-title">评论反哺</div>
         <p className="review-hint">选中左侧一个商品后，可粘贴买家真实评价，AI 会提炼用户真实在乎的卖点与顾虑，自动反哺到该商品的内容生成。</p>
       </div>
     );
@@ -226,7 +260,7 @@ function ReviewMiningPanel({ product, onChanged }: { product: Product | null; on
 
   return (
     <div className="review-mining">
-      <div className="workspace-section-title">💬 评论反哺 · {product.name}</div>
+      <div className="workspace-section-title">评论反哺 · {product.name}</div>
       <label>买家评价（每行一条，粘贴即可）
         <textarea value={reviews} onChange={(event) => setReviews(event.target.value)} placeholder={'回购第三次了，敷完第二天上妆不卡粉\n瓶口有点容易洒\n学生党也买得起'} rows={5} />
       </label>
@@ -284,7 +318,7 @@ function ExperimentsTab({ experiments, products, activeProductId, onChanged }: {
   return (
     <div className="experiments-tab">
       <div className="workspace-editor exp-generator">
-        <div className="workspace-section-title">🧪 新建 A/B 实验</div>
+        <div className="workspace-section-title">新建 A/B 实验</div>
         <p className="review-hint">同一商品产出多个标题/钩子变体 → 真实投放 → 回填数据 → 系统判定赢家 → 赢家风格反哺后续生成。{activeProductId ? `当前商品：${products.find((p) => p.id === activeProductId)?.name ?? ''}` : '未选商品，将仅按下方描述生成。'}</p>
         <label>平台
           <select value={platform} onChange={(e) => setPlatform(e.target.value as Platform)}>
@@ -354,7 +388,7 @@ function VariantRow({ experimentId, variant, isWinner, onChanged }: { experiment
       <div className="variant-head">
         <span className="variant-label">{variant.label}</span>
         {variant.angle && <span className="variant-angle">{variant.angle}</span>}
-        {isWinner && <span className="variant-crown">🏆 转化最高</span>}
+        {isWinner && <span className="variant-crown">转化最高</span>}
         {variant.impressions > 0 && <span className="variant-cvr">{rate.toFixed(2)}% 转化</span>}
       </div>
       <div className="variant-title">{variant.title}</div>
@@ -482,13 +516,13 @@ function TasksTab({ tasks, assets, onCompleted }: { tasks: AgentTask[]; assets: 
 }
 
 function PerformanceTab({ assets, metrics, insights, onCreated }: { assets: ContentAsset[]; metrics: PerformanceRecord[]; insights: PerformanceInsights | null; onCreated: () => Promise<void> }) {
-  const [assetId, setAssetId] = useState(''); const [impressions, setImpressions] = useState(''); const [conversions, setConversions] = useState('');
+  const [assetId, setAssetId] = useState(''); const [impressions, setImpressions] = useState(''); const [clicks, setClicks] = useState(''); const [conversions, setConversions] = useState('');
   const create = async () => {
     const asset = assets.find((item) => item.id === assetId); if (!asset) return;
-    await createPerformance({ asset_id: assetId, platform: asset.platform, impressions: Number(impressions) || 0, conversions: Number(conversions) || 0, engagements: 0, clicks: 0, revenue: 0, notes: '' });
-    setImpressions(''); setConversions(''); await onCreated();
+    await createPerformance({ asset_id: assetId, platform: asset.platform, impressions: Number(impressions) || 0, conversions: Number(conversions) || 0, engagements: 0, clicks: Number(clicks) || 0, add_to_carts: 0, orders: Number(conversions) || 0, refunds: 0, revenue: 0, ad_spend: 0, notes: '' });
+    setImpressions(''); setClicks(''); setConversions(''); await onCreated();
   };
-  return <div className="workspace-grid"><div className="workspace-list">{insights && <div className="performance-summary"><strong>{insights.conversion_rate}%</strong><span>整体转化率</span><p>{insights.summary}</p></div>}{metrics.map((metric) => <div className="workspace-list-item static" key={metric.id}><strong>{assets.find((item) => item.id === metric.asset_id)?.name ?? '内容资产'}</strong><span>曝光 {metric.impressions} · 转化 {metric.conversions}</span></div>)}</div><div className="workspace-editor"><div className="workspace-section-title">记录发布效果</div><label>内容<select value={assetId} onChange={(event) => setAssetId(event.target.value)}><option value="">选择内容资产</option>{assets.map((asset) => <option value={asset.id} key={asset.id}>{asset.name}</option>)}</select></label><label>曝光量<input type="number" min="0" value={impressions} onChange={(event) => setImpressions(event.target.value)} /></label><label>转化数<input type="number" min="0" value={conversions} onChange={(event) => setConversions(event.target.value)} /></label><button className="workspace-primary" disabled={!assetId} onClick={create}>记录效果</button></div></div>;
+  return <div className="workspace-grid"><div className="workspace-list">{insights && <div className="performance-summary"><div className="performance-kpis"><span><strong>{insights.click_rate}%</strong>CTR</span><span><strong>{insights.click_conversion_rate}%</strong>点击后成交</span><span><strong>{insights.refund_rate}%</strong>退款率</span><span><strong>{insights.roas}</strong>ROAS</span></div><p>{insights.summary}</p></div>}{metrics.map((metric) => <div className="workspace-list-item static" key={metric.id}><strong>{assets.find((item) => item.id === metric.asset_id)?.name ?? '内容资产'}</strong><span>曝光 {metric.impressions} · 点击 {metric.clicks} · 下单 {metric.orders || metric.conversions} · 退款 {metric.refunds}</span></div>)}</div><div className="workspace-editor"><div className="workspace-section-title">记录发布效果</div><label>内容<select value={assetId} onChange={(event) => setAssetId(event.target.value)}><option value="">选择内容资产</option>{assets.map((asset) => <option value={asset.id} key={asset.id}>{asset.name}</option>)}</select></label><label>曝光量<input type="number" min="0" value={impressions} onChange={(event) => setImpressions(event.target.value)} /></label><label>点击量<input type="number" min="0" value={clicks} onChange={(event) => setClicks(event.target.value)} /></label><label>转化数<input type="number" min="0" value={conversions} onChange={(event) => setConversions(event.target.value)} /></label><button className="workspace-primary" disabled={!assetId} onClick={create}>记录效果</button><PerformanceCsvImport assets={assets} onImported={onCreated} /></div></div>;
 }
 
 function SceneTab() {
@@ -543,7 +577,7 @@ function SceneTab() {
       {all.length === 0 && <div className="workspace-empty">模板加载中…</div>}
       {all.map(t => (
         <button className={`workspace-list-item${selectedId === t.id ? ' selected' : ''}`} key={t.id} onClick={() => { setSelectedId(t.id); setShowNew(false); }}>
-          <strong>{t.builtin ? '📦 ' : '✏️ '}{t.name}</strong>
+          <strong>{t.name}</strong>
           <span>{t.aspect_ratio} · {t.description.slice(0, 40)}{t.description.length > 40 ? '…' : ''}</span>
         </button>
       ))}

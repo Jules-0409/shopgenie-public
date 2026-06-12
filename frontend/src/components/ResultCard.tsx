@@ -20,7 +20,7 @@ function renderPlaceholder(text: string) {
 const PlatformIcon = ({ platform }: { platform: Platform }) => {
   if (platform === 'xhs') return <XhsMark />;
   if (platform === 'dy') return <DyMark />;
-  if (platform === 'cs') return <span style={{ fontSize: 18 }}>💬</span>;
+  if (platform === 'cs') return <IconComment />;
   return <AmazonMark />;
 };
 

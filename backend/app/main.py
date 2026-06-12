@@ -55,6 +55,8 @@ from app.workspace import (
 from app.workspace_context import learn_product_from_message
 from app.review_mining import analyze_reviews
 from app.ab_testing import generate_variants
+from app.operations import build_operations_brief
+from app.performance_import import import_performance_csv, preview_performance_csv
 
 logging.basicConfig(
     level=logging.INFO,
@@ -509,8 +511,12 @@ class PerformanceInput(BaseModel):
     impressions: int = Field(default=0, ge=0)
     engagements: int = Field(default=0, ge=0)
     clicks: int = Field(default=0, ge=0)
+    add_to_carts: int = Field(default=0, ge=0)
+    orders: int = Field(default=0, ge=0)
     conversions: int = Field(default=0, ge=0)
+    refunds: int = Field(default=0, ge=0)
     revenue: float = Field(default=0, ge=0)
+    ad_spend: float = Field(default=0, ge=0)
     notes: str = Field(default="", max_length=1000)
 
 
@@ -524,11 +530,36 @@ async def api_performance_insights() -> dict[str, int | float | str]:
     return await run_in_threadpool(build_performance_insights)
 
 
+@app.get("/api/operations/brief")
+async def api_operations_brief() -> dict[str, object]:
+    return await run_in_threadpool(build_operations_brief)
+
+
 @app.post("/api/performance", response_model=PerformanceRecord)
 async def api_create_performance(req: PerformanceInput) -> PerformanceRecord:
     data = req.model_dump()
     data["platform"] = req.platform.value
     return await run_in_threadpool(save_performance, PerformanceRecord(**data))
+
+
+class PerformanceCsvInput(BaseModel):
+    csv_text: str = Field(min_length=1, max_length=200_000)
+
+
+@app.post("/api/performance/import/preview")
+async def api_preview_performance_csv(req: PerformanceCsvInput) -> dict[str, object]:
+    try:
+        return await run_in_threadpool(preview_performance_csv, req.csv_text)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/api/performance/import")
+async def api_import_performance_csv(req: PerformanceCsvInput) -> dict[str, object]:
+    try:
+        return await run_in_threadpool(import_performance_csv, req.csv_text)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 # --- Sessions ---
