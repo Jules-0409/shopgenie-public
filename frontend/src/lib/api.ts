@@ -271,6 +271,9 @@ export async function* sendChatStream(
   if (!reader) throw new Error('无法读取流');
   const decoder = new TextDecoder();
   let buffer = '';
+  // currentEvent 必须在 read() 循环外，否则当一个事件的 event: 行与 data: 行
+  // 被 TCP 拆到不同 chunk 时（长 result 常见），event 标记会丢失、事件被误判。
+  let currentEvent = '';
 
   try {
     while (true) {
@@ -280,7 +283,6 @@ export async function* sendChatStream(
       const lines = buffer.split('\n');
       buffer = lines.pop() ?? '';
 
-      let currentEvent = '';
       for (const line of lines) {
         if (line.startsWith('event: ')) {
           currentEvent = line.slice(7).trim();

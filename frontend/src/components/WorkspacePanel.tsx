@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
 import useSWR from 'swr';
 import { swrKeys, swrFetcher } from '@/lib/swr-fetcher';
 import {
@@ -55,6 +54,7 @@ interface WorkspacePanelProps {
   activeProductId: string | null;
   productContextLocked: boolean;
   onActiveProductChange: (productId: string | null) => void;
+  onCreateFromTopic: (platform: Platform, brief: string, productId: string | null) => void;
   targetAssetId: string | null;
   initialTab?: WorkspaceTab;
   prefillParams?: {
@@ -65,25 +65,8 @@ interface WorkspacePanelProps {
   } | null;
 }
 
-export default function WorkspacePanel({ open, onClose, activeProductId, productContextLocked, onActiveProductChange, targetAssetId, initialTab, prefillParams }: WorkspacePanelProps) {
+export default function WorkspacePanel({ open, onClose, activeProductId, productContextLocked, onActiveProductChange, onCreateFromTopic, targetAssetId, initialTab, prefillParams }: WorkspacePanelProps) {
   const [tab, setTab] = useState<Tab>('products');
-  const router = useRouter();
-  const searchParams = useSearchParams();
-
-  const setQueryParams = (params: Record<string, string | null>) => {
-    const nextParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
-    Object.entries(params).forEach(([key, val]) => {
-      if (val === null) {
-        nextParams.delete(key);
-      } else {
-        nextParams.set(key, val);
-      }
-    });
-    const query = nextParams.toString();
-    const pathname = (typeof window !== 'undefined' ? window.location.pathname : '').replace(/^\/shopgenie/, '') || '/';
-    const url = `${pathname}${query ? `?${query}` : ''}`;
-    router.replace(url, { scroll: false });
-  };
 
   const { data: products = [], mutate: mutateProducts } = useSWR(swrKeys.products, swrFetcher.products);
   const { data: assets = [], mutate: mutateAssets } = useSWR('/shopgenie/api/assets', listContentAssets);
@@ -177,6 +160,7 @@ export default function WorkspacePanel({ open, onClose, activeProductId, product
                 if (assetId) setSelectedAssetId(assetId);
               }}
               onClose={onClose}
+              onCreateFromTopic={onCreateFromTopic}
               activeProductId={activeProductId}
               products={products}
             />
@@ -710,6 +694,7 @@ function CalendarTab({
   onSaved,
   onSelectTab,
   onClose,
+  onCreateFromTopic,
   activeProductId,
   products,
 }: {
@@ -718,26 +703,10 @@ function CalendarTab({
   onSaved: () => Promise<void>;
   onSelectTab: (tab: WorkspaceTab, assetId: string | null) => void;
   onClose: () => void;
+  onCreateFromTopic: (platform: Platform, brief: string, productId: string | null) => void;
   activeProductId: string | null;
   products: Product[];
 }) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-
-  const setQueryParams = (params: Record<string, string | null>) => {
-    const nextParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
-    Object.entries(params).forEach(([key, val]) => {
-      if (val === null) {
-        nextParams.delete(key);
-      } else {
-        nextParams.set(key, val);
-      }
-    });
-    const query = nextParams.toString();
-    const pathname = (typeof window !== 'undefined' ? window.location.pathname : '').replace(/^\/shopgenie/, '') || '/';
-    const url = `${pathname}${query ? `?${query}` : ''}`;
-    router.replace(url, { scroll: false });
-  };
 
   const events = calendarData?.events ?? [];
   const scheduledAssets = calendarData?.scheduled_assets ?? [];
@@ -809,17 +778,7 @@ function CalendarTab({
                             key={p}
                             className="workspace-secondary"
                             style={{ fontSize: '11px', padding: '3px 8px', borderRadius: 4 }}
-                            onClick={() => {
-                              // 只走 URL：去掉 workspace 参数即关闭面板。这里不能再调 onClose()，
-                              // 它会基于尚未提交的旧 location 再发一次 router.replace，把本次参数冲掉。
-                              setQueryParams({
-                                action: 'create',
-                                platform: p,
-                                brief: topic,
-                                product_id: activeProductId,
-                                workspace: null,
-                              });
-                            }}
+                            onClick={() => onCreateFromTopic(p as Platform, topic, activeProductId)}
                           >
                             去 {p === 'xhs' ? '小红书' : p === 'dy' ? '抖音' : p === 'amazon' ? 'Amazon' : p} 创作
                           </button>

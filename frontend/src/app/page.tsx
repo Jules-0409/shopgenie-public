@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import useSWR from 'swr';
 import { swrKeys, swrFetcher } from '@/lib/swr-fetcher';
 import { useChatContext } from '@/context/ChatContext';
@@ -27,7 +27,6 @@ const starterText: Record<Platform, string> = {
 };
 
 function Home() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const chat = useChatContext();
 
@@ -52,89 +51,59 @@ function Home() {
   } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Helper to update search params and trigger navigation changes
-  const setQueryParams = (params: Record<string, string | null>) => {
-    const nextParams = new URLSearchParams(window.location.search);
+  // 把工作台参数反映到地址栏 —— 只用 history.replaceState，不走 router。
+  // 静态导出 + basePath 下 router.replace 会触发整页硬跳转到 /shopgenie（无尾斜杠），
+  // 命中 nginx 的 location / 而跳回个人站；history.replaceState 只改地址栏、不导航，彻底规避。
+  const reflectUrl = (params: Record<string, string | null>) => {
+    const next = new URLSearchParams(window.location.search);
     Object.entries(params).forEach(([key, val]) => {
-      if (val === null) {
-        nextParams.delete(key);
-      } else {
-        nextParams.set(key, val);
-      }
+      if (val === null) next.delete(key); else next.set(key, val);
     });
-    const query = nextParams.toString();
-    const pathname = window.location.pathname.replace(/^\/shopgenie/, '') || '/';
-    const url = `${pathname}${query ? `?${query}` : ''}`;
-    router.replace(url, { scroll: false });
+    const query = next.toString();
+    window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
   };
 
-  // Sync workspace and prefill states from URL Search Parameters (Deep Linking)
+  const openWorkspace = (tab: WorkspaceTab, params: { product_id?: string | null; asset_id?: string | null; platform?: Platform | null; brief?: string | null } = {}) => {
+    setWorkspaceTab(tab);
+    setWorkspaceAssetId(params.asset_id ?? null);
+    if (params.product_id) chat.setActiveProduct(params.product_id);
+    setWorkspacePrefill({ product_id: params.product_id ?? null, asset_id: params.asset_id ?? null, platform: params.platform ?? null, brief: params.brief ?? null });
+    setWorkspaceOpen(true);
+    reflectUrl({ workspace: tab, asset_id: params.asset_id ?? null, product_id: params.product_id ?? null });
+  };
+
+  const closeWorkspace = () => {
+    setWorkspaceOpen(false);
+    setWorkspacePrefill(null);
+    setWorkspaceAssetId(null);
+    reflectUrl({ workspace: null, asset_id: null, product_id: null, platform: null, brief: null, action: null });
+  };
+
+  // 营销日历「去创作」：直接进聊天并预填选题，不再绕 URL round-trip
+  const createFromTopic = (plat: Platform, brief: string, productId: string | null) => {
+    closeWorkspace();
+    if (productId) chat.setActiveProduct(productId);
+    const prodName = products.find((p) => p.id === productId)?.name ?? '';
+    const promptText =
+      plat === 'xhs' ? `我想写一篇小红书种草笔记，围绕选题“${brief}”，产品是：${prodName || '（请选择商品）'}`
+      : plat === 'dy' ? `我想写一个抖音短视频脚本，围绕选题“${brief}”，产品是：${prodName || '（请选择商品）'}`
+      : plat === 'amazon' ? `I want to create an Amazon listing for the topic "${brief}". Product facts: ${prodName ? `${prodName} facts...` : ''}`
+      : `我想针对“${brief}”选题生成内容，产品是：${prodName || '（请选择商品）'}`;
+    setPendingPlatform(plat);
+    setDraft(promptText);
+    chat.setActiveId(null);
+    setView('chat');
+  };
+
+  // 仅在首次挂载时读一次 URL，支持深链进入工作台（分享链接）
   useEffect(() => {
     const ws = searchParams.get('workspace') as WorkspaceTab | null;
-    const aid = searchParams.get('asset_id');
-    const pid = searchParams.get('product_id');
-    const plat = searchParams.get('platform') as Platform | null;
-    const brf = searchParams.get('brief');
-
-    // 异步应用，规避 set-state-in-effect 的级联渲染（与草稿恢复同一惯例）
-    Promise.resolve().then(() => {
-      if (ws) {
-        setWorkspaceTab(ws);
-        setWorkspaceAssetId(aid);
-        if (pid) {
-          chat.setActiveProduct(pid);
-        }
-        setWorkspacePrefill({
-          product_id: pid,
-          asset_id: aid,
-          platform: plat,
-          brief: brf,
-        });
-        setWorkspaceOpen(true);
-      } else {
-        setWorkspaceOpen(false);
-        setWorkspacePrefill(null);
-        setWorkspaceAssetId(null);
-      }
-    });
-  }, [searchParams, chat]);
-
-  // Handle marketing calendar topic creation redirection
-  useEffect(() => {
-    const action = searchParams.get('action');
-    const plat = searchParams.get('platform') as Platform | null;
-    const brf = searchParams.get('brief');
-    const pid = searchParams.get('product_id');
-
-    if (action === 'create' && plat && brf) {
-      // Clear URL query parameters to close drawer and avoid infinite trigger
-      setQueryParams({ action: null, workspace: null, platform: null, brief: null, product_id: null });
-
-      if (pid) {
-        chat.setActiveProduct(pid);
-      }
-
-      const prod = products.find((p) => p.id === pid);
-      const prodName = prod ? prod.name : '';
-      let promptText = '';
-      if (plat === 'xhs') {
-        promptText = `我想写一篇小红书种草笔记，围绕选题“${brf}”，产品是：${prodName || '（请选择商品）'}`;
-      } else if (plat === 'dy') {
-        promptText = `我想写一个抖音短视频脚本，围绕选题“${brf}”，产品是：${prodName || '（请选择商品）'}`;
-      } else if (plat === 'amazon') {
-        promptText = `I want to create an Amazon listing for the topic "${brf}". Product facts: ${prodName ? `${prodName} facts...` : ''}`;
-      } else {
-        promptText = `我想针对“${brf}”选题生成内容，产品是：${prodName || '（请选择商品）'}`;
-      }
-
-      Promise.resolve().then(() => {
-        setPendingPlatform(plat);
-        setDraft(promptText);
-        chat.setActiveId(null);
-        setView('chat');
-      });
-    }
-  }, [searchParams, products, chat]);
+    if (!ws) return;
+    Promise.resolve().then(() => openWorkspace(ws, {
+      asset_id: searchParams.get('asset_id'),
+      product_id: searchParams.get('product_id'),
+    }));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     getProfile().then(setProfile).catch(() => setProfile(null));
@@ -209,7 +178,7 @@ function Home() {
 
   return (
     <div className="app-shell">
-      <Sidebar activeId={chat.activeId} conversations={summaries} mobileOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} onNew={newChat} onSelect={openChat} onDelete={chat.deleteConversation} onProfileOpen={() => setProfileOpen(true)} onWorkspaceOpen={() => setQueryParams({ workspace: 'products' })} profile={profile} />
+      <Sidebar activeId={chat.activeId} conversations={summaries} mobileOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} onNew={newChat} onSelect={openChat} onDelete={chat.deleteConversation} onProfileOpen={() => setProfileOpen(true)} onWorkspaceOpen={() => openWorkspace('products')} profile={profile} />
       <main className="main-shell">
         {/* ── Studio View ── */}
         {view === 'studio' ? (
@@ -267,7 +236,7 @@ function Home() {
                         brandName={profile?.brand_name}
                         onOptionSelect={message.questions ? (text) => chat.send(text) : undefined}
                         onRegenerate={isLastAI ? chat.regenerate : undefined}
-                        onEditAsset={(assetId) => setQueryParams({ workspace: 'content', asset_id: assetId })}
+                        onEditAsset={(assetId) => openWorkspace('content', { asset_id: assetId })}
                         onTweakVariant={
                           message.card?.platform === 'cs'
                             ? (label, tweak) => handleSend(`微调客服话术：针对“${label}”场景的回复进行微调，要求是：${tweak}`)
@@ -278,7 +247,7 @@ function Home() {
                   })}
                 </div>
               </div>
-            ) : <WelcomeScreen onSelect={startFromPlatform} profile={profile} onProfileOpen={() => setProfileOpen(true)} onOpenWorkspace={(tab, params) => setQueryParams({ workspace: tab, ...params })} onBatch={() => { chat.setActiveId(null); setPendingPlatform(null); setView('batch'); }} />}
+            ) : <WelcomeScreen onSelect={startFromPlatform} profile={profile} onProfileOpen={() => setProfileOpen(true)} onOpenWorkspace={(tab, params) => openWorkspace(tab, params as Parameters<typeof openWorkspace>[1])} onBatch={() => { chat.setActiveId(null); setPendingPlatform(null); setView('batch'); }} />}
 
             {view === 'chat' && (chat.activeConversation || pendingPlatform) && (
               <>
@@ -288,7 +257,7 @@ function Home() {
                   const loved = ins?.loved_points ?? [];
                   if (loved.length === 0) return null;
                   return (
-                    <button className="ctx-insight-strip" onClick={() => setQueryParams({ workspace: 'products' })}>
+                    <button className="ctx-insight-strip" onClick={() => openWorkspace('products')}>
                       <span className="ctx-insight-tag">正在参考评论洞察</span>
                       <span className="ctx-insight-points">{loved.slice(0, 3).join(' · ')}</span>
                       <span className="ctx-insight-arrow">管理 →</span>
@@ -302,9 +271,7 @@ function Home() {
         )}
       </main>
       <ProfilePanel open={profileOpen} onClose={() => setProfileOpen(false)} onSaved={setProfile} />
-      <WorkspacePanel open={workspaceOpen} initialTab={workspaceTab} onClose={() => {
-        setQueryParams({ workspace: null, asset_id: null, product_id: null, platform: null, brief: null });
-      }} activeProductId={chat.activeProductId} productContextLocked={isProductContextLocked(chat.activeConversation)} onActiveProductChange={(productId) => {
+      <WorkspacePanel open={workspaceOpen} initialTab={workspaceTab} onClose={closeWorkspace} onCreateFromTopic={createFromTopic} activeProductId={chat.activeProductId} productContextLocked={isProductContextLocked(chat.activeConversation)} onActiveProductChange={(productId) => {
         chat.setActiveProduct(productId);
       }} targetAssetId={workspaceAssetId} prefillParams={workspacePrefill} />
     </div>
