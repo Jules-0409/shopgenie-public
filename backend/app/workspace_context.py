@@ -40,6 +40,8 @@ def build_review_prompt(product: Product | None) -> str:
     insights = getattr(product, "review_insights", None) if product else None
     if not insights:
         return ""
+    if insights.get("product_id") != product.id:
+        return ""
     lines: list[str] = []
     loved = insights.get("loved_points") or []
     pains = insights.get("pain_points") or []
@@ -55,7 +57,7 @@ def build_review_prompt(product: Product | None) -> str:
         lines.append(f"易踩雷表达（尽量回避）：{'；'.join(avoid)}")
     if not lines:
         return ""
-    header = "【用户评论洞察】（来自真实评价，用用户语言而非臆想卖点）"
+    header = f"【当前商品评论洞察：{product.name}】（仅属于商品 ID {product.id}，不得用于其他商品）"
     return header + "\n" + "\n".join(lines)
 
 

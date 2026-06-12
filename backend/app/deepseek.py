@@ -209,6 +209,11 @@ class DeepSeekClient:
                     sections=[ContentSection.model_validate(section) for section in parsed.get("sections", [])],
                 )
             except (KeyError, TypeError, ValueError) as exc:
+                if kind == "draft":
+                    message = str(parsed.get("message", "")).strip()
+                    if message:
+                        logger.warning("DeepSeek 草稿结构不完整，保留追问继续收集信息: %s", exc)
+                        return message, None
                 logger.error("DeepSeek 返回结构不完整: %s | parsed keys: %s", exc, list(parsed.keys()))
                 raise DeepSeekError("DeepSeek 返回的成品结构不完整") from exc
             return str(parsed.get("message", "已生成可直接使用的内容。")).strip(), result

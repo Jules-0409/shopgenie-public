@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { vi } from 'vitest';
 import ChatBubble from '@/components/ChatBubble';
 import type { GeneratedContent } from '@/lib/api';
 
@@ -57,5 +58,27 @@ describe('ChatBubble', () => {
   it('renders placeholder badges for [待补充] markers', () => {
     const { container } = render(<ChatBubble msg={{ id: '10', role: 'ai', text: '这个产品[待补充:品牌名]很好用' }} />);
     expect(container.querySelector('.placeholder-badge')).toBeInTheDocument();
+  });
+
+  it('requires an answer for every follow-up question before submitting', () => {
+    const onSubmit = vi.fn();
+    render(<ChatBubble msg={{
+      id: '11',
+      role: 'ai',
+      text: '请补充信息',
+      questions: [
+        { question: '防水等级？', options: ['IP67', '不防水'] },
+        { question: '电池容量？', options: ['600mAh', '800mAh'] },
+      ],
+    }} onOptionSelect={onSubmit} />);
+
+    const incomplete = screen.getByRole('button', { name: '请完成全部问题（0/2）' });
+    expect(incomplete).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: '600mAh' }));
+    expect(screen.getByRole('button', { name: '请完成全部问题（1/2）' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'IP67' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认选择' }));
+
+    expect(onSubmit).toHaveBeenCalledWith('防水等级？：IP67\n电池容量？：600mAh');
   });
 });

@@ -35,10 +35,24 @@ describe('ProductsTab', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /轻量保温杯/ }));
     expect(screen.getByDisplayValue('容量 500ml')).toBeInTheDocument();
+    expect(onSelect).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: '用于当前生成' }));
     expect(onSelect).toHaveBeenCalledWith('product_1');
 
     fireEvent.click(screen.getByRole('button', { name: '+ 新建商品' }));
     expect(screen.getByText('新建商品事实卡')).toBeInTheDocument();
+  });
+
+  it('does not allow switching the product of a conversation that already has content', () => {
+    const onSelect = vi.fn();
+    render(<ProductsTab products={[product]} activeProductId={null} productContextLocked onSelect={onSelect} onCreated={vi.fn().mockResolvedValue(undefined)} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /轻量保温杯/ }));
+    const useButton = screen.getByRole('button', { name: '当前会话已有内容，请新建对话后切换商品' });
+
+    expect(useButton).toBeDisabled();
+    expect(onSelect).not.toHaveBeenCalled();
   });
 
   it('saves edits through the update contract', async () => {

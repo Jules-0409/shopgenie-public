@@ -140,6 +140,47 @@ def test_chat_saves_asset_task_and_explicit_product_fact(tmp_path: Path, monkeyp
     assert tasks[0]["status"] == "completed"
 
 
+def test_chat_rejects_missing_bound_product_before_generation(tmp_path: Path, monkeypatch) -> None:
+    memory.DB_PATH = tmp_path / "workspace.db"
+    called = False
+
+    async def fake_chat(self: DeepSeekClient, request: ChatRequest) -> ChatResponse:
+        nonlocal called
+        called = True
+        raise AssertionError("无效商品不应进入生成")
+
+    monkeypatch.setattr(DeepSeekClient, "chat", fake_chat)
+    app.dependency_overrides[get_settings] = lambda: Settings(deepseek_api_key="test-key")
+    try:
+        with TestClient(app) as client:
+            response = client.post("/api/chat", json={
+                "platform": "xhs",
+                "message": "生成笔记",
+                "product_id": "missing_product",
+            })
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 404
+    assert called is False
+
+
+def test_stream_chat_rejects_missing_bound_product(tmp_path: Path) -> None:
+    memory.DB_PATH = tmp_path / "workspace.db"
+
+    with TestClient(app) as client:
+        response = client.post("/api/chat/stream", json={
+            "platform": "xhs",
+            "message": "生成笔记",
+            "product_id": "missing_product",
+        })
+        tasks = client.get("/api/tasks").json()
+
+    assert response.status_code == 200
+    assert "当前会话绑定的商品不存在" in response.text
+    assert tasks == []
+
+
 def test_chat_marks_task_failed_when_model_fails(tmp_path: Path, monkeypatch) -> None:
     memory.DB_PATH = tmp_path / "workspace.db"
 

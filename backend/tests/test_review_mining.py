@@ -33,12 +33,30 @@ def test_build_review_prompt_empty_when_no_insights() -> None:
 
 
 def test_build_product_prompt_injects_review_insights() -> None:
-    product = Product(name="补水面膜", category="护肤", review_insights=normalize_insights(RAW_LLM, 12))
+    product = Product(name="补水面膜", category="护肤")
+    product.review_insights = {
+        **normalize_insights(RAW_LLM, 12),
+        "product_id": product.id,
+        "product_name": product.name,
+    }
     prompt = build_product_prompt(product)
-    assert "【用户评论洞察】" in prompt
+    assert f"【当前商品评论洞察：{product.name}】" in prompt
     assert "敷完第二天上妆不卡粉" in prompt  # loved point 注入
     assert "瓶口设计容易洒" in prompt        # pain point 注入
     assert "回购第三次了" in prompt          # voice quote 注入
+
+
+def test_build_product_prompt_rejects_review_insights_from_another_product() -> None:
+    product = Product(name="保温杯", review_insights={
+        **normalize_insights(RAW_LLM, 12),
+        "product_id": "another_product",
+        "product_name": "补水面膜",
+    })
+
+    prompt = build_product_prompt(product)
+
+    assert "敷完第二天上妆不卡粉" not in prompt
+    assert "当前商品评论洞察" not in prompt
 
 
 @pytest.mark.asyncio
@@ -79,6 +97,8 @@ def test_review_api_flow(tmp_path: Path, monkeypatch) -> None:
         assert analyzed.status_code == 200
         insights = analyzed.json()["review_insights"]
         assert insights["loved_points"] == ["敷完第二天上妆不卡粉", "保湿很顶"]
+        assert insights["product_id"] == pid
+        assert insights["product_name"] == "补水面膜"
 
         # 普通更新商品不应抹掉评论洞察
         updated = client.put(f"/api/products/{pid}", json={"name": "补水面膜 Pro", "category": "护肤"})

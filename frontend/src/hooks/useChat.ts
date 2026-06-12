@@ -14,6 +14,7 @@ export interface Conversation {
   platform: Platform;
   messages: Message[];
   productId?: string | null;
+  productBindingConfirmed?: boolean;
   studio?: {
     phase: 'define' | 'scene';
     ref: string | null;
@@ -25,6 +26,9 @@ export interface Conversation {
     pendingTask?: { tid: string; kind: 'gen' | 'adjust' | 'scene'; adj?: string } | null;
   };
 }
+
+export const isProductContextLocked = (conversation: Conversation | null) =>
+  Boolean(conversation?.messages.some((message) => !message.demo));
 
 const STORAGE_KEY = 'shopgenie.conversations.v1';
 
@@ -102,7 +106,8 @@ export function useChat(defaultProductId: string | null) {
           seen.add(s.id);
           restored.push({
             id: s.id, title: s.title, named: true, platform: s.platform as Platform,
-            productId: s.product_id,
+            productId: s.product_binding_confirmed ? s.product_id : null,
+            productBindingConfirmed: s.product_binding_confirmed,
             messages: repairMessageIds(s.messages as unknown as Message[]),
             studio: repairStudio(s.studio as Conversation['studio']),
           });
@@ -136,7 +141,13 @@ export function useChat(defaultProductId: string | null) {
           const seen = new Set<string>();
           const deduped = saved
             .filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true; })
-            .map(c => ({ ...c, messages: repairMessageIds(c.messages), studio: repairStudio(c.studio) }));
+            .map(c => ({
+              ...c,
+              productId: c.productBindingConfirmed ? c.productId : null,
+              productBindingConfirmed: Boolean(c.productBindingConfirmed),
+              messages: repairMessageIds(c.messages),
+              studio: repairStudio(c.studio),
+            }));
           setConversations([...deduped, DEMO_CONVERSATION]);
           setActiveId(deduped[0].id);
           idCounter.current = saved.reduce((max, c) => {
@@ -166,6 +177,7 @@ export function useChat(defaultProductId: string | null) {
         saveStoredSession({
           id: conv.id, platform: conv.platform, title: conv.title,
           product_id: conv.productId ?? null,
+          product_binding_confirmed: Boolean(conv.productBindingConfirmed && conv.productId),
           messages: conv.messages as unknown as Record<string, unknown>[],
           studio: conv.studio as Record<string, unknown> | undefined,
         }).catch(() => { /* ignore */ });
@@ -272,6 +284,7 @@ export function useChat(defaultProductId: string | null) {
       platform: platformChoice,
       messages: [],
       productId: defaultProductId,
+      productBindingConfirmed: Boolean(defaultProductId),
     };
     setConversations((current) => [conversation, ...current]);
     setActiveId(conversation.id);
@@ -316,8 +329,10 @@ export function useChat(defaultProductId: string | null) {
 
   const setActiveProduct = useCallback((productId: string | null) => {
     if (activeConversation) {
+      const contextLocked = isProductContextLocked(activeConversation);
+      if (contextLocked && activeConversation.productId !== productId) return;
       setConversations((current) => current.map((c) =>
-        c.id === activeConversation.id ? { ...c, productId } : c,
+        c.id === activeConversation.id ? { ...c, productId, productBindingConfirmed: Boolean(productId) } : c,
       ));
     }
   }, [activeConversation]);

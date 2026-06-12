@@ -3,6 +3,7 @@ from pathlib import Path
 import app.memory as memory
 from app.schemas import ContentSection, GeneratedContent, Platform
 from app.workspace import (
+    Experiment,
     KnowledgeSource,
     PerformanceRecord,
     Product,
@@ -17,6 +18,7 @@ from app.workspace import (
     list_performance,
     list_products,
     save_knowledge_source,
+    save_experiment,
     save_performance,
     save_product,
 )
@@ -167,6 +169,20 @@ def test_operations_brief_has_onboarding_and_healthy_states(tmp_path: Path) -> N
     healthy = build_operations_brief()
     assert healthy["status"] == "healthy"
     assert healthy["actions"] == []
+
+
+def test_operations_brief_keeps_running_experiment_visible_until_sample_is_ready(tmp_path: Path) -> None:
+    use_db(tmp_path)
+    save_product(Product(name="保温杯", review_insights={"summary": "轻便"}))
+    save_experiment(Experiment(variants=[
+        {"label": "A", "impressions": 300, "clicks": 30, "conversions": 3},
+        {"label": "B", "impressions": 299, "clicks": 20, "conversions": 2},
+    ]))
+
+    actions = build_operations_brief()["actions"]
+
+    assert any(action["id"] == "experiments-waiting-for-data" for action in actions)
+    assert any(action["metric"] == "1 个实验样本不足" for action in actions)
 
 
 def test_performance_csv_preview_and_import_are_atomic(tmp_path: Path) -> None:

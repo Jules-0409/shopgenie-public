@@ -89,6 +89,8 @@ async def chat(request: ChatRequest, settings: Settings = Depends(get_settings))
     try:
         profile = await run_in_threadpool(get_profile)
         product = await run_in_threadpool(get_product, request.product_id) if request.product_id else None
+        if request.product_id and not product:
+            raise HTTPException(status_code=404, detail="当前会话绑定的商品不存在，请重新选择商品后新建会话")
         if product:
             product = await run_in_threadpool(learn_product_from_message, product, request.message)
         task = await run_in_threadpool(create_agent_task, request.message)
@@ -230,6 +232,8 @@ async def api_analyze_reviews(
     except DeepSeekError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     product.review_insights = insights
+    product.review_insights["product_id"] = product.id
+    product.review_insights["product_name"] = product.name
     return await run_in_threadpool(save_product, product)
 
 
@@ -290,6 +294,10 @@ async def api_record_variant_metrics(experiment_id: str, req: VariantMetricsInpu
     variant = next((v for v in experiment.variants if v.get("label") == req.label), None)
     if not variant:
         raise HTTPException(status_code=404, detail="变体不存在")
+    if req.clicks > req.impressions:
+        raise HTTPException(status_code=422, detail="点击数不能大于曝光数")
+    if req.conversions > req.clicks:
+        raise HTTPException(status_code=422, detail="转化数不能大于点击数")
     variant["impressions"] = req.impressions
     variant["clicks"] = req.clicks
     variant["conversions"] = req.conversions
@@ -569,6 +577,7 @@ class SessionInput(BaseModel):
     platform: Platform
     title: str = Field(default="", max_length=200)
     product_id: str | None = None
+    product_binding_confirmed: bool = False
     messages: list[dict[str, Any]] = Field(default_factory=list, max_length=500)
     studio: dict[str, Any] | None = None
 
@@ -590,7 +599,9 @@ async def api_get_session(session_id: str) -> StoredSession:
 async def api_save_session(req: SessionInput) -> StoredSession:
     session = StoredSession(
         id=req.id, platform=req.platform.value, title=req.title,
-        product_id=req.product_id, messages=req.messages,
+        product_id=req.product_id if req.product_binding_confirmed else None,
+        product_binding_confirmed=req.product_binding_confirmed,
+        messages=req.messages,
         studio=req.studio,
     )
     await run_in_threadpool(save_session, session)

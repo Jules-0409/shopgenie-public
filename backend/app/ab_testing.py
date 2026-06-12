@@ -95,6 +95,6 @@ async def generate_variants(
     deepseek = client or DeepSeekClient(settings, product=product)
     raw = await deepseek.complete_json(SYSTEM_PROMPT, user_prompt)
     variants = _normalize_variants(raw.get("variants") if isinstance(raw, dict) else None, n)
-    if not variants:
-        raise DeepSeekError("变体生成结果为空")
+    if len(variants) < 2:
+        raise DeepSeekError("变体生成结果不足 2 个，无法开始 A/B 实验")
     return variants

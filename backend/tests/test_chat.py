@@ -75,6 +75,7 @@ def test_prompt_forbids_inventing_product_facts() -> None:
     assert '"kind":"draft"' in prompt
     assert '"kind":"result"' in prompt
     assert "与用户的对话沟通一律使用中文" in prompt
+    assert "全部问题与回答" in prompt
 
 
 def test_amazon_prompt_mandates_english_listing() -> None:
@@ -105,3 +106,18 @@ async def test_chat_keeps_title_and_questions_from_markdown_wrapped_json() -> No
 
     assert result.conversation_title == "补水面膜种草"
     assert result.questions == [{"question": "什么肤质？", "options": ["干皮", "自定义填写"]}]
+
+
+def test_incomplete_draft_keeps_follow_up_instead_of_raising() -> None:
+    client = DeepSeekClient(settings())
+    content = json.dumps({
+        "kind": "draft",
+        "message": "还需要确认防水等级",
+        "questions": [{"question": "防水等级？", "options": ["IP67", "不防水"]}],
+    }, ensure_ascii=False)
+
+    message, result = client._parse_content(content, ChatRequest(platform=Platform.AMAZON, message="儿童手表"))
+
+    assert message == "还需要确认防水等级"
+    assert result is None
+    assert client._parse_questions(content) == [{"question": "防水等级？", "options": ["IP67", "不防水"]}]

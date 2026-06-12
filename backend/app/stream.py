@@ -36,6 +36,10 @@ async def chat_stream_generator(
 
         profile = await run_in_threadpool(get_profile)
         product = await run_in_threadpool(get_product, request.product_id) if request.product_id else None
+        if request.product_id and not product:
+            yield sse_event("error", {"message": "当前会话绑定的商品不存在，请重新选择商品后新建会话"})
+            yield sse_event("done", {"status": "error"})
+            return
         if product:
             product = await run_in_threadpool(learn_product_from_message, product, request.message)
 

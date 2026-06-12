@@ -11,6 +11,8 @@ from app import memory
 from app.postprocess import post_process
 from app.schemas import GeneratedContent, Platform
 
+MIN_EXPERIMENT_IMPRESSIONS_PER_VARIANT = 300
+
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
@@ -116,6 +118,8 @@ class Experiment:
     variants: list[dict] = field(default_factory=list)
     status: str = "running"          # running | decided
     winner_label: str | None = None
+    confidence_level: str = "insufficient"  # insufficient | ready
+    confidence_message: str = "尚未达到最小样本量"
     created_at: str = field(default_factory=_now)
     updated_at: str = field(default_factory=_now)
 
@@ -440,19 +444,41 @@ def _variant_cvr(variant: dict) -> float:
 
 
 def compute_winner(experiment: Experiment) -> Experiment:
-    """按转化率判定赢家（同率比点击、再比曝光）；无任一变体有曝光则保持 running。"""
-    scored = [v for v in experiment.variants if (v.get("impressions") or 0) > 0]
-    if not scored:
+    """全部变体达到确定性样本门槛后，按转化率判定赢家。"""
+    if len(experiment.variants) < 2:
         experiment.winner_label = None
         experiment.status = "running"
+        experiment.confidence_level = "insufficient"
+        experiment.confidence_message = "至少需要 2 个变体才能判定赢家"
         return experiment
-    best = max(scored, key=lambda v: (_variant_cvr(v), v.get("clicks") or 0, v.get("impressions") or 0))
+
+    missing = [
+        max(0, MIN_EXPERIMENT_IMPRESSIONS_PER_VARIANT - (variant.get("impressions") or 0))
+        for variant in experiment.variants
+    ]
+    if any(missing):
+        experiment.winner_label = None
+        experiment.status = "running"
+        experiment.confidence_level = "insufficient"
+        experiment.confidence_message = (
+            f"样本不足：每个变体至少需要 {MIN_EXPERIMENT_IMPRESSIONS_PER_VARIANT} 次曝光，"
+            f"当前合计还差 {sum(missing)} 次"
+        )
+        return experiment
+
+    best = max(experiment.variants, key=lambda v: (_variant_cvr(v), v.get("clicks") or 0, v.get("impressions") or 0))
     experiment.winner_label = best.get("label")
     experiment.status = "decided"
+    experiment.confidence_level = "ready"
+    experiment.confidence_message = (
+        f"已达到确定性样本门槛：每个变体至少 {MIN_EXPERIMENT_IMPRESSIONS_PER_VARIANT} 次曝光；"
+        "结果仅用于方向判断，不代表统计显著性"
+    )
     return experiment
 
 
 def save_experiment(experiment: Experiment) -> Experiment:
+    compute_winner(experiment)
     experiment.updated_at = _now()
     _upsert("experiments", experiment.id, asdict(experiment))
     return experiment
@@ -460,7 +486,7 @@ def save_experiment(experiment: Experiment) -> Experiment:
 
 def list_experiments(product_id: str | None = None) -> list[Experiment]:
     experiments = _list("experiments", Experiment)
-    return [e for e in experiments if not product_id or e.product_id == product_id]
+    return [compute_winner(e) for e in experiments if not product_id or e.product_id == product_id]
 
 
 def get_experiment(experiment_id: str) -> Experiment | None:

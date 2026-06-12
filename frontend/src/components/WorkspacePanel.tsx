@@ -53,12 +53,13 @@ interface WorkspacePanelProps {
   open: boolean;
   onClose: () => void;
   activeProductId: string | null;
+  productContextLocked: boolean;
   onActiveProductChange: (productId: string | null) => void;
   targetAssetId: string | null;
   initialTab?: WorkspaceTab;
 }
 
-export default function WorkspacePanel({ open, onClose, activeProductId, onActiveProductChange, targetAssetId, initialTab }: WorkspacePanelProps) {
+export default function WorkspacePanel({ open, onClose, activeProductId, productContextLocked, onActiveProductChange, targetAssetId, initialTab }: WorkspacePanelProps) {
   const [tab, setTab] = useState<Tab>('products');
   const [products, setProducts] = useState<Product[]>([]);
   const [assets, setAssets] = useState<ContentAsset[]>([]);
@@ -129,7 +130,7 @@ export default function WorkspacePanel({ open, onClose, activeProductId, onActiv
         </nav>
         {error && <div className="workspace-error">{error}</div>}
         <div className="workspace-body">
-          {tab === 'products' && <ProductsTab products={products} activeProductId={activeProductId} onSelect={onActiveProductChange} onCreated={refresh} />}
+          {tab === 'products' && <ProductsTab products={products} activeProductId={activeProductId} productContextLocked={productContextLocked} onSelect={onActiveProductChange} onCreated={refresh} />}
           {tab === 'content' && <ContentTab key={versions[0]?.id ?? 'empty'} assets={assets} products={products} selectedAssetId={selectedAssetId} versions={versions} onSelect={setSelectedAssetId} onSaved={async () => { await refresh(); if (selectedAssetId) setVersions(await listContentVersions(selectedAssetId)); }} />}
           {tab === 'experiments' && <ExperimentsTab experiments={experiments} products={products} activeProductId={activeProductId} onChanged={refresh} />}
           {tab === 'knowledge' && <KnowledgeTab sources={sources} onCreated={refresh} />}
@@ -142,15 +143,14 @@ export default function WorkspacePanel({ open, onClose, activeProductId, onActiv
   );
 }
 
-export function ProductsTab({ products, activeProductId, onSelect, onCreated }: {
-  products: Product[]; activeProductId: string | null; onSelect: (id: string | null) => void; onCreated: () => Promise<void>;
+export function ProductsTab({ products, activeProductId, productContextLocked = false, onSelect, onCreated }: {
+  products: Product[]; activeProductId: string | null; productContextLocked?: boolean; onSelect: (id: string | null) => void; onCreated: () => Promise<void>;
 }) {
   const [editingId, setEditingId] = useState<string | 'new' | null>(activeProductId);
   const selected = editingId === 'new' ? null : products.find((product) => product.id === editingId) ?? null;
 
   const selectProduct = (productId: string) => {
     setEditingId(productId);
-    onSelect(productId);
   };
 
   const beginCreate = () => {
@@ -161,19 +161,19 @@ export function ProductsTab({ products, activeProductId, onSelect, onCreated }: 
     <div className="workspace-grid">
       <div className="workspace-list">
         <div className="product-list-head"><div className="workspace-section-title">商品库</div><button onClick={beginCreate}>+ 新建商品</button></div>
-        <button className={!activeProductId ? 'workspace-list-item active-context' : 'workspace-list-item'} onClick={() => { setEditingId(null); onSelect(null); }}><strong>不指定商品</strong><span>仅使用当前对话信息</span></button>
+        <button className={!activeProductId ? 'workspace-list-item active-context' : 'workspace-list-item'} onClick={() => setEditingId(null)}><strong>不指定商品</strong><span>仅使用当前对话信息</span></button>
         {products.map((product) => <button className={`workspace-list-item ${editingId === product.id ? 'selected' : ''} ${activeProductId === product.id ? 'active-context' : ''}`} key={product.id} onClick={() => selectProduct(product.id)}><strong>{product.name}</strong><span>{product.category || '未填写品类'} · {product.facts.length} 条事实{activeProductId === product.id ? ' · 正在用于生成' : ''}</span></button>)}
       </div>
       {editingId === 'new'
-        ? <ProductEditor mode="new" onSaved={async (product) => { onSelect(product.id); setEditingId(product.id); await onCreated(); }} />
+        ? <ProductEditor mode="new" onSaved={async (product) => { setEditingId(product.id); await onCreated(); }} />
         : selected
-          ? <ProductEditor key={selected.updated_at} mode="edit" product={selected} onSaved={async () => { await onCreated(); }} />
-          : <div className="workspace-editor product-detail-empty"><strong>选择一个商品查看详情</strong><span>右侧会展示商品事实、卖点、禁用声明和评论洞察。需要新增商品时，点击左上角「+ 新建商品」。</span></div>}
+          ? <ProductEditor key={selected.updated_at} mode="edit" product={selected} active={activeProductId === selected.id} contextLocked={productContextLocked} onUse={() => onSelect(selected.id)} onSaved={async () => { await onCreated(); }} />
+          : <div className="workspace-editor product-detail-empty"><strong>选择一个商品查看详情</strong><span>右侧会展示商品事实、卖点、禁用声明和评论洞察。查看商品不会改变当前生成上下文。</span>{activeProductId && <button className="workspace-secondary" disabled={productContextLocked} onClick={() => onSelect(null)}>{productContextLocked ? '当前会话已有内容，商品上下文已锁定' : '本次生成不指定商品'}</button>}</div>}
     </div>
   );
 }
 
-function ProductEditor({ mode, product, onSaved }: { mode: 'new' | 'edit'; product?: Product; onSaved: (product: Product) => Promise<void> }) {
+function ProductEditor({ mode, product, active = false, contextLocked = false, onUse, onSaved }: { mode: 'new' | 'edit'; product?: Product; active?: boolean; contextLocked?: boolean; onUse?: () => void; onSaved: (product: Product) => Promise<void> }) {
   const [name, setName] = useState(product?.name ?? '');
   const [category, setCategory] = useState(product?.category ?? '');
   const [audience, setAudience] = useState(product?.audience ?? '');
@@ -192,7 +192,7 @@ function ProductEditor({ mode, product, onSaved }: { mode: 'new' | 'edit'; produ
         facts: split(facts), prohibited_claims: split(prohibited), notes: notes.trim(),
       };
       const saved = mode === 'new' ? await createProduct(payload) : await updateProduct(product!.id, payload);
-      toast(mode === 'new' ? '商品已创建并用于生成' : '商品详情已保存', 'success');
+      toast(mode === 'new' ? '商品已创建，请明确选择是否用于生成' : '商品详情已保存', 'success');
       await onSaved(saved);
     } catch (error) {
       toast(error instanceof Error ? error.message : '商品保存失败');
@@ -202,7 +202,8 @@ function ProductEditor({ mode, product, onSaved }: { mode: 'new' | 'edit'; produ
   };
 
   return <div className="workspace-editor product-detail">
-    <div className="product-detail-head"><div><span>{mode === 'new' ? 'Create product' : 'Product details'}</span><h3>{mode === 'new' ? '新建商品事实卡' : product?.name}</h3></div>{mode === 'edit' && <span className="active-product-status">正在用于生成</span>}</div>
+    <div className="product-detail-head"><div><span>{mode === 'new' ? 'Create product' : 'Product details'}</span><h3>{mode === 'new' ? '新建商品事实卡' : product?.name}</h3></div>{active && <span className="active-product-status">{contextLocked ? '当前会话已锁定' : '正在用于生成'}</span>}</div>
+    {mode === 'edit' && !active && <button className="workspace-secondary" disabled={contextLocked} onClick={onUse}>{contextLocked ? '当前会话已有内容，请新建对话后切换商品' : '用于当前生成'}</button>}
     <label>商品名<input value={name} onChange={(event) => setName(event.target.value)} placeholder="轻量保温杯" /></label>
     <label>品类<input value={category} onChange={(event) => setCategory(event.target.value)} placeholder="家居用品" /></label>
     <label>目标人群<input value={audience} onChange={(event) => setAudience(event.target.value)} placeholder="城市通勤人群" /></label>
@@ -210,7 +211,7 @@ function ProductEditor({ mode, product, onSaved }: { mode: 'new' | 'edit'; produ
     <label>已确认事实<textarea value={facts} onChange={(event) => setFacts(event.target.value)} placeholder="容量 500ml、杯身 230g" /></label>
     <label>禁止声明<textarea value={prohibited} onChange={(event) => setProhibited(event.target.value)} placeholder="永不漏水、保温 48 小时" /></label>
     <label>运营备注<textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="适合秋冬通勤内容" /></label>
-    <button className="workspace-primary" disabled={!name.trim() || saving} onClick={save}>{saving ? '保存中…' : mode === 'new' ? '创建并用于生成' : '保存商品详情'}</button>
+    <button className="workspace-primary" disabled={!name.trim() || saving} onClick={save}>{saving ? '保存中…' : mode === 'new' ? '创建商品' : '保存商品详情'}</button>
     {mode === 'edit' && <ReviewMiningPanel product={product ?? null} onChanged={() => onSaved(product!)} />}
   </div>;
 }
@@ -218,7 +219,8 @@ function ProductEditor({ mode, product, onSaved }: { mode: 'new' | 'edit'; produ
 function ReviewMiningPanel({ product, onChanged }: { product: Product | null; onChanged: () => Promise<void> }) {
   const [reviews, setReviews] = useState('');
   const [busy, setBusy] = useState(false);
-  const insights = product?.review_insights ?? null;
+  const storedInsights = product?.review_insights ?? null;
+  const insights = storedInsights?.product_id === product?.id ? storedInsights : null;
 
   if (!product) {
     return (
@@ -261,6 +263,7 @@ function ReviewMiningPanel({ product, onChanged }: { product: Product | null; on
   return (
     <div className="review-mining">
       <div className="workspace-section-title">评论反哺 · {product.name}</div>
+      {storedInsights && !insights && <p className="review-hint">这份旧评论洞察没有可靠的商品归属，已停止注入生成。请重新分析该商品的真实评价。</p>}
       <label>买家评价（每行一条，粘贴即可）
         <textarea value={reviews} onChange={(event) => setReviews(event.target.value)} placeholder={'回购第三次了，敷完第二天上妆不卡粉\n瓶口有点容易洒\n学生党也买得起'} rows={5} />
       </label>

@@ -59,7 +59,10 @@ function QuestionChips({ questions, onSubmit }: { questions: Question[]; onSubmi
     });
   };
 
-  const hasSelections = Object.values(selections).some((s) => s.length > 0) || Object.values(customInputs).some((s) => s.trim());
+  const answered = questions.filter((_, index) =>
+    (selections[index]?.length ?? 0) > 0 || Boolean(customInputs[index]?.trim()),
+  ).length;
+  const allAnswered = answered === questions.length;
 
   const submit = () => {
     const parts: string[] = [];
@@ -102,8 +105,8 @@ function QuestionChips({ questions, onSubmit }: { questions: Question[]; onSubmi
           />
         </div>
       ))}
-      <button className="question-submit" disabled={!hasSelections} onClick={submit}>
-        确认选择
+      <button className="question-submit" disabled={!allAnswered} onClick={submit}>
+        {allAnswered ? '确认选择' : `请完成全部问题（${answered}/${questions.length}）`}
       </button>
     </div>
   );

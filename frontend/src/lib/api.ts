@@ -30,6 +30,8 @@ interface ChatApiResponse {
 }
 
 export interface ReviewInsights {
+  product_id: string;
+  product_name: string;
   loved_points: string[];
   pain_points: string[];
   avoid_phrases: string[];
@@ -57,6 +59,8 @@ export interface Experiment {
   variants: ExperimentVariant[];
   status: 'running' | 'decided';
   winner_label: string | null;
+  confidence_level: 'insufficient' | 'ready';
+  confidence_message: string;
   created_at: string;
   updated_at: string;
 }
@@ -387,6 +391,7 @@ export interface StoredSession {
   platform: Platform;
   title: string;
   product_id: string | null;
+  product_binding_confirmed: boolean;
   messages: Record<string, unknown>[];
   studio?: Record<string, unknown>;
   created_at: string;

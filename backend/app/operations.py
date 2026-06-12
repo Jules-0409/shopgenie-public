@@ -118,19 +118,15 @@ def _review_action(products: list[Product]) -> OperationsAction | None:
 
 
 def _experiment_action(experiments: list[Experiment]) -> OperationsAction | None:
-    waiting = [
-        experiment for experiment in experiments
-        if experiment.status == "running"
-        and not any((variant.get("impressions") or 0) > 0 for variant in experiment.variants)
-    ]
+    waiting = [experiment for experiment in experiments if experiment.status == "running"]
     if not waiting:
         return None
     return OperationsAction(
         id="experiments-waiting-for-data",
         priority="medium",
-        title="给 A/B 变体回填真实投放数据",
-        reason="这些实验已经生成变体，但还没有曝光数据，暂时无法判断哪种表达更有效。",
-        metric=f"{len(waiting)} 个实验待投放",
+        title="继续投放 A/B 变体，补足判断样本",
+        reason="这些实验尚未达到最小样本量，暂时不会宣布赢家或反哺后续生成。",
+        metric=f"{len(waiting)} 个实验样本不足",
         target_tab="experiments",
         product_id=waiting[0].product_id,
     )

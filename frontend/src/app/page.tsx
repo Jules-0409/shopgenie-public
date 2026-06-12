@@ -12,7 +12,7 @@ import StudioView from '@/components/StudioView';
 import BatchView from '@/components/BatchView';
 import { PLATFORM_LABELS, type Platform } from '@/lib/platforms';
 import { getProfile, listProducts, type Product, type UserProfile } from '@/lib/api';
-import { useChat, DEMO_CONVERSATION } from '@/hooks/useChat';
+import { isProductContextLocked, useChat } from '@/hooks/useChat';
 
 const starterText: Record<Platform, string> = {
   xhs: '我想写一篇小红书种草笔记，产品是：',
@@ -42,7 +42,6 @@ export default function Home() {
     getProfile().then(setProfile).catch(() => setProfile(null));
     listProducts().then((items) => {
       setProducts(items);
-      if (items.length > 0) setDefaultProductId(items[0].id);
     }).catch(() => setProducts([]));
   }, []);
 
@@ -191,7 +190,8 @@ export default function Home() {
             {view === 'chat' && (chat.activeConversation || pendingPlatform) && (
               <>
                 {(() => {
-                  const ins = products.find((p) => p.id === chat.activeProductId)?.review_insights;
+                  const product = products.find((p) => p.id === chat.activeProductId);
+                  const ins = product && product.review_insights?.product_id === product.id ? product.review_insights : null;
                   const loved = ins?.loved_points ?? [];
                   if (loved.length === 0) return null;
                   return (
@@ -209,7 +209,7 @@ export default function Home() {
         )}
       </main>
       <ProfilePanel open={profileOpen} onClose={() => setProfileOpen(false)} onSaved={setProfile} />
-      <WorkspacePanel open={workspaceOpen} initialTab={workspaceTab} onClose={() => { setWorkspaceOpen(false); listProducts().then(setProducts).catch(() => undefined); }} activeProductId={chat.activeProductId} onActiveProductChange={(productId) => {
+      <WorkspacePanel open={workspaceOpen} initialTab={workspaceTab} onClose={() => { setWorkspaceOpen(false); listProducts().then(setProducts).catch(() => undefined); }} activeProductId={chat.activeProductId} productContextLocked={isProductContextLocked(chat.activeConversation)} onActiveProductChange={(productId) => {
         setDefaultProductId(productId);
         chat.setActiveProduct(productId);
       }} targetAssetId={workspaceAssetId} />
