@@ -810,6 +810,8 @@ function CalendarTab({
                             className="workspace-secondary"
                             style={{ fontSize: '11px', padding: '3px 8px', borderRadius: 4 }}
                             onClick={() => {
+                              // 只走 URL：去掉 workspace 参数即关闭面板。这里不能再调 onClose()，
+                              // 它会基于尚未提交的旧 location 再发一次 router.replace，把本次参数冲掉。
                               setQueryParams({
                                 action: 'create',
                                 platform: p,
@@ -817,7 +819,6 @@ function CalendarTab({
                                 product_id: activeProductId,
                                 workspace: null,
                               });
-                              onClose();
                             }}
                           >
                             去 {p === 'xhs' ? '小红书' : p === 'dy' ? '抖音' : p === 'amazon' ? 'Amazon' : p} 创作
