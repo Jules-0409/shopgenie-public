@@ -316,3 +316,30 @@ def test_operations_brief_respects_dismissal_and_resets_on_new_data(tmp_path: Pa
     brief = build_operations_brief()
     action_ids = [action["id"] for action in brief["actions"]]
     assert f"low-click-{asset.id}" in action_ids
+
+
+def test_operations_brief_reminds_backfill_after_three_days(tmp_path: Path) -> None:
+    use_db(tmp_path)
+    from datetime import UTC, datetime, timedelta
+    from app.workspace import save_content_asset
+
+    product = save_product(Product(name="保温杯", review_insights={"summary": "轻便"}))
+    # 资产 A：排期发布 5 天前，无效果数据 → 应提醒回填
+    stale, _ = create_content_asset(content(), product.id)
+    stale.scheduled_at = (datetime.now(UTC) - timedelta(days=5)).isoformat()
+    save_content_asset(stale)
+    # 资产 B：排期发布 1 天前 → 未到 3 天，不提醒
+    fresh, _ = create_content_asset(content(), product.id)
+    fresh.scheduled_at = (datetime.now(UTC) - timedelta(days=1)).isoformat()
+    save_content_asset(fresh)
+    # 资产 C：5 天前发布但已有效果数据 → 不提醒
+    done, _ = create_content_asset(content(), product.id)
+    done.scheduled_at = (datetime.now(UTC) - timedelta(days=5)).isoformat()
+    save_content_asset(done)
+    save_performance(PerformanceRecord(asset_id=done.id, platform="xhs", impressions=1000, clicks=100, conversions=10))
+
+    ids = [action["id"] for action in build_operations_brief()["actions"]]
+
+    assert f"backfill-{stale.id}" in ids
+    assert f"backfill-{fresh.id}" not in ids
+    assert f"backfill-{done.id}" not in ids

@@ -196,6 +196,40 @@ def _review_action(products: list[Product]) -> OperationsAction | None:
     )
 
 
+def _backfill_reminder_actions(
+    assets: list[ContentAsset],
+    records: list[PerformanceRecord],
+) -> list[OperationsAction]:
+    """已排期发布超过 3 天但仍无效果数据的内容，提醒回填——把数据回流本身纳入建议体系。"""
+    assets_with_records = {record.asset_id for record in records}
+    actions: list[OperationsAction] = []
+    now = datetime.now(UTC)
+    for asset in assets:
+        if not asset.scheduled_at or asset.id in assets_with_records:
+            continue
+        try:
+            scheduled = datetime.fromisoformat(asset.scheduled_at.replace("Z", "+00:00"))
+            if scheduled.tzinfo is None:
+                scheduled = scheduled.replace(tzinfo=UTC)
+        except ValueError:
+            continue
+        days = (now - scheduled).days
+        if days < 3:
+            continue
+        actions.append(OperationsAction(
+            id=f"backfill-{asset.id}",
+            priority="medium",
+            title=f"回填「{asset.name}」的发布效果",
+            reason=f"这条内容排期发布已 {days} 天，还没有效果数据。回填后才能进入诊断和 A/B 反哺。",
+            metric=f"发布 {days} 天 · 0 条回流",
+            target_tab="performance",
+            product_id=asset.product_id,
+            asset_id=asset.id,
+            action_type="import_performance",
+        ))
+    return actions
+
+
 def _experiment_action(experiments: list[Experiment]) -> OperationsAction | None:
     waiting = [experiment for experiment in experiments if experiment.status == "running"]
     if not waiting:
@@ -238,6 +272,7 @@ def build_operations_brief() -> dict[str, object]:
             raw_actions.append(review_action)
 
     raw_actions.extend(_performance_actions(assets, records))
+    raw_actions.extend(_backfill_reminder_actions(assets, records))
 
     if assets and not records:
         raw_actions.append(OperationsAction(

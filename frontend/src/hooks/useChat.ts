@@ -166,6 +166,8 @@ export function useChat(defaultProductId: string | null) {
   }, []);
 
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 记录每个会话上次写入后端时的对象引用；state 不可变更新保证"变过的会话引用必然不同"
+  const lastPersistedRef = useRef<Map<string, Conversation>>(new Map());
 
   const persist = useCallback(() => {
     if (!hydrated) return;
@@ -174,13 +176,14 @@ export function useChat(defaultProductId: string | null) {
       const serializable = conversations.filter((c) => c.id !== 'demo-xhs');
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(serializable));
       for (const conv of serializable) {
+        if (lastPersistedRef.current.get(conv.id) === conv) continue; // 未变更，跳过
         saveStoredSession({
           id: conv.id, platform: conv.platform, title: conv.title,
           product_id: conv.productId ?? null,
           product_binding_confirmed: Boolean(conv.productBindingConfirmed && conv.productId),
           messages: conv.messages as unknown as Record<string, unknown>[],
           studio: conv.studio as Record<string, unknown> | undefined,
-        }).catch(() => { /* ignore */ });
+        }).then(() => lastPersistedRef.current.set(conv.id, conv)).catch(() => { /* ignore */ });
       }
     }, 1500);
   }, [conversations, hydrated]);

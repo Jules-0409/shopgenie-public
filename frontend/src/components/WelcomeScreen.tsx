@@ -4,7 +4,7 @@ import useSWR from 'swr';
 import { swrKeys, swrFetcher } from '@/lib/swr-fetcher';
 import { AmazonMark, DyMark, XhsMark, IconComment, IconCamera, IconBox, IconFlask, IconChart } from './Icons';
 import { updateOperationActionState, type OperationsAction, type UserProfile } from '@/lib/api';
-import type { Platform } from '@/lib/platforms';
+import { PLATFORM_LABELS, type Platform } from '@/lib/platforms';
 import type { WorkspaceTab } from './WorkspacePanel';
 
 const PlatformIcon = ({ platform }: { platform: Platform }) => {
@@ -41,10 +41,7 @@ export function OperationsHub({ onOpen }: { onOpen?: (tab: WorkspaceTab, params?
   return (
     <div className="ops-hub">
       <div className="ops-hub-head">
-        <div>
-          <span className="scenario-label">今日运营指挥台</span>
-          <span className="ops-hub-sub">{brief?.summary ?? '正在诊断商品、内容与投放数据…'}</span>
-        </div>
+        <span className="scenario-label">今日运营指挥台</span>
         {brief && <span className={`ops-health ${brief.status}`}>{brief.status === 'healthy' ? '状态良好' : brief.status === 'attention' ? '需要关注' : '稳步推进'}</span>}
       </div>
       {brief && brief.actions.length > 0 && <div className="ops-action-list">{brief.actions.map((action, index) => (
@@ -96,6 +93,34 @@ function AssetStats({ onOpen }: { onOpen?: (tab: WorkspaceTab) => void }) {
   );
 }
 
+function RecentAssets({ onOpen }: { onOpen?: (tab: WorkspaceTab, params?: { asset_id?: string | null }) => void }) {
+  const { data: assets = [] } = useSWR(swrKeys.assets, swrFetcher.assets);
+  if (assets.length === 0) return null;
+  return (
+    <div className="recent-assets">
+      <div className="ops-hub-divider"><span>最近内容</span></div>
+      <div className="recent-asset-list">
+        {assets.slice(0, 4).map((asset) => (
+          <button className="recent-asset" key={asset.id} onClick={() => onOpen?.('content', { asset_id: asset.id })}>
+            <span className={`conversation-dot ${asset.platform}`} />
+            <span className="recent-asset-name">{asset.name}</span>
+            <span className="recent-asset-meta">{PLATFORM_LABELS[asset.platform]} · v{asset.current_version}</span>
+            <span className="ops-card-arrow">→</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const greeting = () => {
+  const hour = new Date().getHours();
+  if (hour < 6) return '夜深了';
+  if (hour < 12) return '早上好';
+  if (hour < 18) return '下午好';
+  return '晚上好';
+};
+
 interface WelcomeScreenProps {
   onSelect: (platform: Platform, title: string) => void;
   profile: UserProfile | null;
@@ -105,11 +130,17 @@ interface WelcomeScreenProps {
 }
 
 export default function WelcomeScreen({ onSelect, profile, onOpenWorkspace, onBatch }: WelcomeScreenProps) {
+  const { data: brief } = useSWR(swrKeys.brief, swrFetcher.brief);
 
   return (
     <div className="cockpit-layout dot-grid">
       <div className="cockpit-main">
+        <div className="cockpit-masthead">
+          <h1 className="cockpit-greeting">{greeting()}，{profile?.brand_name || '店主'}</h1>
+          <p className="cockpit-status">{brief?.summary ?? '正在诊断商品、内容与投放数据…'}</p>
+        </div>
         <OperationsHub onOpen={onOpenWorkspace} />
+        {(brief?.actions.length ?? 0) < 3 && <RecentAssets onOpen={onOpenWorkspace} />}
 
         {/* Quick Creator Row */}
         <div className="quick-creator">

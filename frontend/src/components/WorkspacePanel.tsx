@@ -666,7 +666,7 @@ function PerformanceTab({ assets, metrics, insights, onCreated, prefillParams }:
   return (
     <div className="workspace-grid">
       <div className="workspace-list">
-        {insights && (
+        {insights && insights.records > 0 ? (
           <div className="performance-summary">
             <div className="performance-kpis">
               <span><strong>{insights.click_rate}%</strong>CTR</span>
@@ -676,6 +676,8 @@ function PerformanceTab({ assets, metrics, insights, onCreated, prefillParams }:
             </div>
             <p>{insights.summary}</p>
           </div>
+        ) : (
+          <div className="workspace-empty">还没有效果数据。右侧录入第一条发布效果（或用 CSV 批量导入），运营指挥台才能开始诊断点击率、转化和退款信号。</div>
         )}
         {metrics.map((metric) => (
           <div className="workspace-list-item static" key={metric.id}>
