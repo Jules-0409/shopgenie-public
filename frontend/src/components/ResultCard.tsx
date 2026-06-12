@@ -144,32 +144,261 @@ const AmazonPreview = ({ card, image, dragOver, onDragOver, onDragLeave, onDrop 
 );
 
 /* CS preview — clean card layout, no phone mockup */
-const CSPreview = ({ card }: { card: GeneratedContent }) => (
-  <div className="cs-preview-shell">
-    <div className="cs-intro">
-      <p>{card.body}</p>
-    </div>
-    <div className="cs-scenarios">
-      {card.sections.map((section) => (
-        <div className="cs-scenario-card" key={section.label}>
-          <div className="cs-scenario-label">{section.label}</div>
-          <div className="cs-scenario-content">
-            {section.content.split('---').map((variant, i) => (
-              <div className="cs-variant" key={i}>
-                {variant.trim().split('\n').map((line, j) => (
-                  <p key={j}>{line}</p>
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  </div>
-);
+const CSPreview = ({ card, onTweakVariant }: { card: GeneratedContent; onTweakVariant?: (label: string, tweak: string) => void }) => {
+  const [activePlatform, setActivePlatform] = useState<'taobao' | 'xhs' | 'dy'>('taobao');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [tweakingId, setTweakingId] = useState<string | null>(null);
+  const [tweakValue, setTweakValue] = useState('');
+  
+  // Local manual edits
+  const [editedText, setEditedText] = useState<Record<string, string>>({});
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTextVal, setEditTextVal] = useState('');
 
-export default function ResultCard({ card, brandName = '你的品牌', onRegenerate, quality, onEdit, warnings }: {
+  // Selected variant per scenario section index
+  const [selectedVariantIdx, setSelectedVariantIdx] = useState<Record<number, number>>({});
+
+  const handleCopyVariant = async (text: string, id: string) => {
+    await navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    window.setTimeout(() => setCopiedId(null), 1500);
+  };
+
+  const getCustomerQuestion = (label: string): string => {
+    const l = label.toLowerCase();
+    if (l.includes('发货') || l.includes('物流') || l.includes('快递') || l.includes('送达')) {
+      return '你好，请问我刚下单的宝贝什么时候能发货？大概几天能收到？';
+    }
+    if (l.includes('售后') || l.includes('退') || l.includes('换') || l.includes('坏') || l.includes('漏') || l.includes('破损')) {
+      return '客服在吗？我收到的包裹有点破损，而且里面的东西好像漏了一些，这该怎么处理啊？可以给我退换吗？';
+    }
+    if (l.includes('尺码') || l.includes('规格') || l.includes('大小') || l.includes('多大') || l.includes('推荐')) {
+      return '你好，我是第一次买你家的这个，身高 168cm 体重 115 斤，请问建议买什么规格的比较合适？';
+    }
+    if (l.includes('优惠') || l.includes('折扣') || l.includes('便宜') || l.includes('活动') || l.includes('券') || l.includes('差价')) {
+      return '你好呀，请问现在店里有什么优惠券可以领吗？买两件能打折或者送赠品不？';
+    }
+    if (l.includes('正品') || l.includes('质量') || l.includes('真') || l.includes('假') || l.includes('靠谱')) {
+      return '你好，我想问下这是正品吗？有正品保障或者官方质检证书吗？有点担心质量。';
+    }
+    if (l.includes('使用') || l.includes('怎么用') || l.includes('说明') || l.includes('教程') || l.includes('方法')) {
+      return '你好，我收到的宝贝怎么使用啊？有什么需要特别注意的禁忌或者正确手法吗？';
+    }
+    return `你好，我想咨询一下关于“${label}”的具体情况。`;
+  };
+
+  return (
+    <div className="cs-preview-shell">
+      {/* Platform selector */}
+      <div className="cs-platform-selector">
+        <button 
+          className={`cs-platform-tab taobao ${activePlatform === 'taobao' ? 'active' : ''}`}
+          onClick={() => setActivePlatform('taobao')}
+        >
+          <span className="platform-tab-icon taobao">旺</span>
+          淘宝旺旺风格
+        </button>
+        <button 
+          className={`cs-platform-tab xhs ${activePlatform === 'xhs' ? 'active' : ''}`}
+          onClick={() => setActivePlatform('xhs')}
+        >
+          <span className="platform-tab-icon xhs">红</span>
+          小红书私信风格
+        </button>
+        <button 
+          className={`cs-platform-tab dy ${activePlatform === 'dy' ? 'active' : ''}`}
+          onClick={() => setActivePlatform('dy')}
+        >
+          <span className="platform-tab-icon dy">抖</span>
+          抖音私信风格
+        </button>
+      </div>
+
+      <div className="cs-intro">
+        <p>{card.body}</p>
+      </div>
+
+      <div className="cs-scenarios">
+        {card.sections.map((section, sIdx) => {
+          const rawVariants = section.content.split('---').map(v => v.trim()).filter(Boolean);
+          if (rawVariants.length === 0) return null;
+          
+          const currentVarIdx = selectedVariantIdx[sIdx] ?? 0;
+          const activeVarIdx = currentVarIdx < rawVariants.length ? currentVarIdx : 0;
+          const originalText = rawVariants[activeVarIdx];
+          const variantId = `${sIdx}-${activeVarIdx}`;
+          const currentText = editedText[variantId] ?? originalText;
+
+          const isCopied = copiedId === variantId;
+          const isTweaking = tweakingId === variantId;
+          const isEditing = editingId === variantId;
+
+          const customerText = getCustomerQuestion(section.label);
+
+          return (
+            <div className={`cs-mock-container ${activePlatform}`} key={section.label}>
+              {/* Scenario tag */}
+              <div className="cs-mock-scenario-tag">
+                场景 {sIdx + 1}：{section.label}
+              </div>
+
+              {/* IM Mock Header */}
+              <div className="cs-mock-header">
+                <div className="cs-mock-back-arrow">←</div>
+                <div className="cs-mock-title-info">
+                  <span className="cs-mock-name">
+                    {activePlatform === 'taobao' ? '买家咨询 (淘宝旺旺)' : activePlatform === 'xhs' ? '小红书私信' : '抖音私信咨询'}
+                  </span>
+                  <span className="cs-mock-status">● 在线</span>
+                </div>
+                <div className="cs-mock-more-actions">•••</div>
+              </div>
+
+              {/* IM Mock Chat Area */}
+              <div className="cs-mock-chat">
+                {/* Customer Message (Left) */}
+                <div className="cs-chat-row buyer">
+                  <div className="cs-chat-avatar buyer">👤</div>
+                  <div className="cs-chat-bubble-wrapper">
+                    <div className="cs-chat-bubble buyer">{customerText}</div>
+                    <span className="cs-chat-time">刚刚</span>
+                  </div>
+                </div>
+
+                {/* CS Message (Right) */}
+                <div className="cs-chat-row seller">
+                  <div className="cs-chat-bubble-wrapper">
+                    {isEditing ? (
+                      <div className="cs-chat-bubble-edit">
+                        <textarea
+                          className="cs-edit-textarea"
+                          value={editTextVal}
+                          onChange={(e) => setEditTextVal(e.target.value)}
+                          rows={4}
+                        />
+                        <div className="cs-edit-actions">
+                          <button 
+                            className="cs-edit-btn cancel" 
+                            onClick={() => setEditingId(null)}
+                          >
+                            取消
+                          </button>
+                          <button 
+                            className="cs-edit-btn save" 
+                            onClick={() => {
+                              setEditedText(prev => ({ ...prev, [variantId]: editTextVal }));
+                              setEditingId(null);
+                            }}
+                          >
+                            保存
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="cs-chat-bubble seller">
+                        {currentText.split('\n').map((line, j) => (
+                          <p key={j}>{line}</p>
+                        ))}
+                      </div>
+                    )}
+                    <span className="cs-chat-time">刚刚 · 发送成功</span>
+                  </div>
+                  <div className="cs-chat-avatar seller">🤖</div>
+                </div>
+              </div>
+
+              {/* Variant selection bar */}
+              {rawVariants.length > 1 && (
+                <div className="cs-variant-selector">
+                  {rawVariants.map((_, vIdx) => (
+                    <button
+                      key={vIdx}
+                      className={`cs-variant-tab ${activeVarIdx === vIdx ? 'active' : ''}`}
+                      onClick={() => {
+                        setSelectedVariantIdx(prev => ({ ...prev, [sIdx]: vIdx }));
+                        if (editingId) setEditingId(null);
+                      }}
+                    >
+                      方案 {vIdx + 1}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Action Toolbar */}
+              <div className="cs-mock-toolbar">
+                <button
+                  className={`cs-toolbar-btn ${isCopied ? 'success' : ''}`}
+                  onClick={() => handleCopyVariant(currentText, variantId)}
+                  disabled={isEditing}
+                >
+                  {isCopied ? '✓ 已复制' : '一键复制'}
+                </button>
+                <button
+                  className={`cs-toolbar-btn ${isEditing ? 'active' : ''}`}
+                  onClick={() => {
+                    if (isEditing) {
+                      setEditingId(null);
+                    } else {
+                      setEditingId(variantId);
+                      setEditTextVal(currentText);
+                    }
+                  }}
+                >
+                  {isEditing ? '正在编辑' : '编辑修改'}
+                </button>
+                {onTweakVariant && (
+                  <button
+                    className={`cs-toolbar-btn ${isTweaking ? 'active' : ''}`}
+                    onClick={() => {
+                      if (isTweaking) {
+                        setTweakingId(null);
+                      } else {
+                        setTweakingId(variantId);
+                        setTweakValue('');
+                      }
+                    }}
+                    disabled={isEditing}
+                  >
+                    AI 微调
+                  </button>
+                )}
+              </div>
+
+              {/* AI Tweak input box */}
+              {isTweaking && onTweakVariant && (
+                <div className="cs-variant-tweak-box">
+                  <textarea
+                    value={tweakValue}
+                    onChange={(e) => setTweakValue(e.target.value)}
+                    placeholder="输入对此回复方案的 AI 微调要求，例如：语气更热情一点、强调限时折扣..."
+                    className="cs-tweak-textarea"
+                    rows={2}
+                  />
+                  <button
+                    className="cs-tweak-submit"
+                    onClick={() => {
+                      if (tweakValue.trim()) {
+                        onTweakVariant(section.label, tweakValue.trim());
+                        setTweakingId(null);
+                      }
+                    }}
+                  >
+                    确认微调
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+export default function ResultCard({ card, brandName = '你的品牌', onRegenerate, quality, onEdit, warnings, onTweakVariant }: {
   card: GeneratedContent; brandName?: string; onRegenerate?: () => void; quality?: QualityReport; onEdit?: () => void; warnings?: string[];
+  onTweakVariant?: (label: string, tweak: string) => void;
 }) {
   const [copied, setCopied] = useState(false);
   const { image, dragOver, onDragOver, onDragLeave, onDrop } = useDropImage();
@@ -193,7 +422,7 @@ export default function ResultCard({ card, brandName = '你的品牌', onRegener
         {card.platform === 'xhs' && <XhsPreview card={card} brandName={brandName} image={image} dragOver={dragOver} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} />}
         {card.platform === 'dy' && <DouyinPreview card={card} brandName={brandName} image={image} dragOver={dragOver} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} />}
         {card.platform === 'amazon' && <AmazonPreview card={card} image={image} dragOver={dragOver} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} />}
-        {card.platform === 'cs' && <CSPreview card={card} />}
+        {card.platform === 'cs' && <CSPreview card={card} onTweakVariant={onTweakVariant} />}
       </div>
       {/* 后端强契约保证：校验失败的成品不会到达这里，能渲染即代表结构校验通过 */}
       <footer className="result-footer"><span className="check">✓ 平台结构校验通过</span>{warnings?.some(w => w.includes('自动矫正')) && <span className="check" style={{ color: 'var(--warn, #b45309)' }}>⚠ 已自动矫正一次</span>}{quality && <span className={`quality-pill ${quality.score >= 80 ? 'good' : 'review'}`}>质量 {quality.score}</span>}<span className="tip">生成内容请在发布前核对产品事实</span></footer>

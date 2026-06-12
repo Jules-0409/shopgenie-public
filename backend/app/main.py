@@ -18,8 +18,9 @@ from app.memory import UserProfile, get_profile, save_profile, delete_profile
 from app.sessions import StoredSession, list_sessions, get_session, save_session, delete_session
 from app.knowledge_fetch import fetch_public_page
 from app.web_search import discover_knowledge, needs_web_discovery
-from app.schemas import ChatRequest, ChatResponse, GeneratedContent, Platform
+from app.schemas import ChatRequest, ChatResponse, GeneratedContent, Platform, ActionStateRequest
 from app.workspace import (
+    save_action_state,
     AgentTask,
     ContentAsset,
     ContentVersion,
@@ -51,12 +52,15 @@ from app.workspace import (
     save_performance,
     save_product,
     build_performance_insights,
+    get_content_asset,
+    save_content_asset,
 )
 from app.workspace_context import learn_product_from_message
 from app.review_mining import analyze_reviews
 from app.ab_testing import generate_variants
 from app.operations import build_operations_brief
 from app.performance_import import import_performance_csv, preview_performance_csv
+from app.marketing import MARKETING_EVENTS, get_topics_for_event
 
 logging.basicConfig(
     level=logging.INFO,
@@ -371,6 +375,54 @@ async def api_delete_content(asset_id: str) -> dict[str, bool]:
     return {"deleted": await run_in_threadpool(delete_content_asset, asset_id)}
 
 
+class ScheduleAssetInput(BaseModel):
+    scheduled_at: str | None = Field(default=None, description="ISO format date string, e.g., '2026-06-15'")
+
+
+@app.post("/api/content/{asset_id}/schedule", response_model=ContentAsset)
+async def api_schedule_asset(asset_id: str, req: ScheduleAssetInput) -> ContentAsset:
+    asset = await run_in_threadpool(get_content_asset, asset_id)
+    if not asset:
+        raise HTTPException(status_code=404, detail="内容资产不存在")
+    asset.scheduled_at = req.scheduled_at
+    return await run_in_threadpool(save_content_asset, asset)
+
+
+@app.get("/api/marketing/calendar")
+async def api_get_marketing_calendar() -> dict[str, Any]:
+    profile = await run_in_threadpool(get_profile)
+    category = profile.category if profile else None
+
+    events = []
+    for event in MARKETING_EVENTS:
+        topics = get_topics_for_event(event, category)
+        events.append({
+            "id": event["id"],
+            "name": event["name"],
+            "date_range": event["date_range"],
+            "description": event["description"],
+            "platforms": event["platforms"],
+            "topics": topics
+        })
+
+    assets = await run_in_threadpool(list_content_assets)
+    # Filter only assets that have scheduled_at set
+    scheduled_assets = [
+        {
+            "id": asset.id,
+            "name": asset.name,
+            "platform": asset.platform,
+            "scheduled_at": asset.scheduled_at
+        }
+        for asset in assets if asset.scheduled_at
+    ]
+
+    return {
+        "events": events,
+        "scheduled_assets": scheduled_assets
+    }
+
+
 class ContentVersionInput(BaseModel):
     content: GeneratedContent
     change_note: str = Field(default="手动编辑", max_length=300)
@@ -541,6 +593,12 @@ async def api_performance_insights() -> dict[str, int | float | str]:
 @app.get("/api/operations/brief")
 async def api_operations_brief() -> dict[str, object]:
     return await run_in_threadpool(build_operations_brief)
+
+
+@app.post("/api/operations/actions/{action_id}/state")
+async def api_update_action_state(action_id: str, req: ActionStateRequest) -> dict[str, bool]:
+    await run_in_threadpool(save_action_state, action_id, req.state, req.metric_snapshot)
+    return {"success": True}
 
 
 @app.post("/api/performance", response_model=PerformanceRecord)

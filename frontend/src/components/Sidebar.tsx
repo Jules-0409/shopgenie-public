@@ -72,11 +72,24 @@ export default function Sidebar({ activeId, conversations, mobileOpen, onClose, 
             <div className="conversation-label">最近对话</div>
             {conversations.length === 0 && <div className="conversation-empty">还没有对话，开始第一条吧。</div>}
             {conversations.map((item) => (
-              <button className={`conversation-item ${item.id === activeId ? 'active' : ''}`} key={item.id} onClick={() => select(item.id)}>
-                <span className={`conversation-dot ${item.platform}`} />
-                <span className="conversation-title">{item.title}</span>
-                <span className="conversation-delete" onClick={(e) => handleDeleteClick(item, e)} title="删除对话">×</span>
-              </button>
+              <div className={`conversation-item ${item.id === activeId ? 'active' : ''}`} key={item.id}>
+                <button
+                  className="conversation-select-btn"
+                  onClick={() => select(item.id)}
+                  aria-label={`选择对话：${item.title}`}
+                >
+                  <span className={`conversation-dot ${item.platform}`} />
+                  <span className="conversation-title">{item.title}</span>
+                </button>
+                <button
+                  className="conversation-delete"
+                  onClick={(e) => handleDeleteClick(item, e)}
+                  title="删除对话"
+                  aria-label={`删除对话：${item.title}`}
+                >
+                  ×
+                </button>
+              </div>
             ))}
           </section>
         </div>

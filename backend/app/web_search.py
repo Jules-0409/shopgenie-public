@@ -88,12 +88,52 @@ async def search_public_web(query: str, client: httpx.AsyncClient | None = None)
             await http.aclose()
 
 
+def evaluate_credibility(url: str, platform_value: str) -> str:
+    """根据域名与平台判断网页的可信度评级，返回加粗标识前缀。"""
+    try:
+        parsed = urlparse(url)
+        domain = parsed.netloc.lower()
+    except Exception:
+        return "【未验证】"
+    
+    # 各平台官方域名定义
+    official_domains = {
+        "xhs": ["xiaohongshu.com", "rednote.cn", "xhslink.com"],
+        "dy": ["douyin.com", "bytedance.com", "oceanengine.com"],
+        "amazon": ["amazon.com", "amazon.cn", "amazonservices.com", "sellercentral.amazon.com"]
+    }
+    
+    # 优先匹配指定平台的官方渠道
+    for k, domains in official_domains.items():
+        if any(d in domain or domain.endswith("." + d) for d in domains):
+            if k == platform_value:
+                return "【官方认证】"
+            else:
+                return "【跨平台官方】"
+                
+    # 高可信度通用后缀
+    high_credibility = ["gov.cn", "edu.cn", "wikipedia.org", "w3.org"]
+    if any(d in domain or domain.endswith("." + d) for d in high_credibility):
+        return "【高可信度】"
+        
+    # 主流行业媒体或社区
+    medium_credibility = [
+        "36kr.com", "sspai.com", "huxiu.com", "ithome.com", "zhihu.com",
+        "csdn.net", "github.com", "sohu.com", "sinajs.cn"
+    ]
+    if any(d in domain or domain.endswith("." + d) for d in medium_credibility):
+        return "【媒体报道】"
+        
+    return "【第三方网页】"
+
+
 async def discover_knowledge(query: str, platform: Platform) -> list[KnowledgeSource]:
     results = await search_public_web(query)
     sources = []
     for title, url, snippet in results:
+        credibility_tag = evaluate_credibility(url, platform.value)
         source = KnowledgeSource(
-            title=title,
+            title=f"{credibility_tag}{title}",
             source_type="web_search",
             platform=platform.value,
             content=snippet or f"公开网页候选：{title}",

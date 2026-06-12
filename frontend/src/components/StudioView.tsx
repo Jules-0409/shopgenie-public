@@ -1,14 +1,21 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import type { ImageTemplate, DesignTemplates } from '@/lib/api';
-import { getDesignTemplates } from '@/lib/api';
+import { getDesignTemplates, getUserIdHeader } from '@/lib/api';
 import { toast } from '@/lib/toast';
 import type { Platform } from '@/lib/platforms';
 import type { Conversation } from '@/hooks/useChat';
 import type { Message } from '@/components/ChatBubble';
 
 async function apiPost(url: string, body: Record<string, unknown>) {
-  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-User-Id': getUserIdHeader()
+    },
+    body: JSON.stringify(body)
+  });
   if (!r.ok) { const e = await r.json().catch(() => ({ detail: '请求失败' })); throw new Error((e as { detail?: string }).detail ?? '请求失败'); }
   return r.json();
 }
@@ -20,7 +27,11 @@ async function pollUntilDone(tid: string, isCancelled?: () => boolean): Promise<
     await new Promise(r => setTimeout(r, 2000));
     if (isCancelled?.()) return 'cancelled';
     try {
-      const r = await fetch('/shopgenie/api/studio/poll/' + tid);
+      const r = await fetch('/shopgenie/api/studio/poll/' + tid, {
+        headers: {
+          'X-User-Id': getUserIdHeader()
+        }
+      });
       if (!r.ok) {
         // 后端明确失败（任务失败/超时/上游错误）时立即停止，网络抖动容忍 3 次
         if (r.status === 408 || r.status === 502 || ++failures >= 3) return null;

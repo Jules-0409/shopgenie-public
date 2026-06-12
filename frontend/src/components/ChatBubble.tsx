@@ -112,12 +112,13 @@ function QuestionChips({ questions, onSubmit }: { questions: Question[]; onSubmi
   );
 }
 
-export default function ChatBubble({ msg, onOptionSelect, onRegenerate, brandName, onEditAsset }: {
+export default function ChatBubble({ msg, onOptionSelect, onRegenerate, brandName, onEditAsset, onTweakVariant }: {
   msg: Message;
   onOptionSelect?: (text: string) => void;
   onRegenerate?: () => void;
   brandName?: string;
   onEditAsset?: (assetId: string) => void;
+  onTweakVariant?: (label: string, tweak: string) => void;
 }) {
   return (
     <div className={`message-row ${msg.role === 'user' ? 'user' : ''}`}>
@@ -129,7 +130,7 @@ export default function ChatBubble({ msg, onOptionSelect, onRegenerate, brandNam
           </div>
         )}
         {msg.warnings && msg.warnings.length > 0 && <WarningBanner warnings={msg.warnings} />}
-        {msg.card && <ResultCard card={msg.card} brandName={brandName} onRegenerate={onRegenerate} quality={msg.quality} warnings={msg.warnings} onEdit={msg.assetId && onEditAsset ? () => onEditAsset(msg.assetId!) : undefined} />}
+        {msg.card && <ResultCard card={msg.card} brandName={brandName} onRegenerate={onRegenerate} quality={msg.quality} warnings={msg.warnings} onEdit={msg.assetId && onEditAsset ? () => onEditAsset(msg.assetId!) : undefined} onTweakVariant={onTweakVariant} />}
         {msg.questions && msg.questions.length > 0 && onOptionSelect && (
           <QuestionChips questions={msg.questions} onSubmit={onOptionSelect} />
         )}

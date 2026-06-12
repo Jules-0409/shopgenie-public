@@ -54,6 +54,7 @@ class ContentAsset:
     current_version: int = 1
     created_at: str = field(default_factory=_now)
     updated_at: str = field(default_factory=_now)
+    scheduled_at: str | None = None
 
 
 @dataclass
@@ -150,6 +151,9 @@ def _connect() -> sqlite3.Connection:
         );
         CREATE TABLE IF NOT EXISTS experiments (
             id TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS operations_actions (
+            id TEXT PRIMARY KEY, state TEXT NOT NULL, last_updated_at TEXT NOT NULL, metric_snapshot TEXT
         );
     """)
     conn.commit()
@@ -293,6 +297,12 @@ def list_content_assets() -> list[ContentAsset]:
 
 def get_content_asset(asset_id: str) -> ContentAsset | None:
     return _get("content_assets", asset_id, ContentAsset)
+
+
+def save_content_asset(asset: ContentAsset) -> ContentAsset:
+    asset.updated_at = _now()
+    _upsert("content_assets", asset.id, asdict(asset))
+    return asset
 
 
 def delete_content_asset(asset_id: str) -> bool:
@@ -499,5 +509,44 @@ def delete_experiment(experiment_id: str) -> bool:
         cursor = conn.execute("DELETE FROM experiments WHERE id = ?", (experiment_id,))
         conn.commit()
         return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+def save_action_state(action_id: str, state: str, metric_snapshot: str = "") -> None:
+    conn = _connect()
+    try:
+        now_str = _now()
+        conn.execute(
+            "INSERT INTO operations_actions (id, state, last_updated_at, metric_snapshot) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(id) DO UPDATE SET state = excluded.state, last_updated_at = excluded.last_updated_at, metric_snapshot = excluded.metric_snapshot",
+            (action_id, state, now_str, metric_snapshot),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_action_states() -> dict[str, dict]:
+    conn = _connect()
+    try:
+        rows = conn.execute("SELECT id, state, last_updated_at, metric_snapshot FROM operations_actions").fetchall()
+        return {
+            row["id"]: {
+                "state": row["state"],
+                "last_updated_at": row["last_updated_at"],
+                "metric_snapshot": row["metric_snapshot"],
+            }
+            for row in rows
+        }
+    finally:
+        conn.close()
+
+
+def delete_action_state(action_id: str) -> None:
+    conn = _connect()
+    try:
+        conn.execute("DELETE FROM operations_actions WHERE id = ?", (action_id,))
+        conn.commit()
     finally:
         conn.close()

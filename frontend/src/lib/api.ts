@@ -87,6 +87,7 @@ export interface ContentAsset {
   current_version: number;
   created_at: string;
   updated_at: string;
+  scheduled_at: string | null;
 }
 
 export interface ContentVersion {
@@ -165,9 +166,12 @@ export interface OperationsAction {
   title: string;
   reason: string;
   metric: string;
-  target_tab: 'products' | 'content' | 'experiments' | 'knowledge' | 'tasks' | 'performance' | 'scene';
+  target_tab: 'products' | 'content' | 'experiments' | 'knowledge' | 'tasks' | 'performance' | 'calendar';
   product_id: string | null;
   asset_id: string | null;
+  action_type: string | null;
+  action_params: Record<string, unknown> | null;
+  impression_impact: number;
 }
 
 export interface OperationsBrief {
@@ -222,23 +226,16 @@ export const EMPTY_PROFILE: UserProfile = {
 };
 
 export async function getProfile(): Promise<UserProfile | null> {
-  const response = await fetch('/shopgenie/api/profile');
-  if (!response.ok) throw new Error('品牌档案加载失败');
-  const data = await response.json() as { profile: UserProfile | null };
+  const data = await requestJson<{ profile: UserProfile | null }>('/shopgenie/api/profile');
   return data.profile;
 }
 
 export async function saveProfile(profile: UserProfile): Promise<UserProfile> {
-  const response = await fetch('/shopgenie/api/profile', {
+  const data = await requestJson<{ profile: UserProfile }>('/shopgenie/api/profile', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(profile),
   });
-  if (!response.ok) {
-    const body = await response.json().catch(() => null) as { detail?: string } | null;
-    throw new Error(body?.detail ?? '品牌档案保存失败');
-  }
-  const data = await response.json() as { profile: UserProfile };
   return data.profile;
 }
 
@@ -257,7 +254,10 @@ export async function* sendChatStream(
 ): AsyncGenerator<StreamEvent> {
   const response = await fetch('/shopgenie/api/chat/stream', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'X-User-Id': getUserIdHeader()
+    },
     body: JSON.stringify({ platform, message, history, product_id: productId || null, image_url: imageUrl || null }),
     signal,
   });
@@ -298,6 +298,19 @@ export async function* sendChatStream(
   }
 }
 
+export function getUserIdHeader(): string {
+  if (typeof window !== 'undefined') {
+    const params = new URLSearchParams(window.location.search);
+    const urlUid = params.get('user_id');
+    if (urlUid) {
+      localStorage.setItem('shopgenie.user_id', urlUid);
+      return urlUid;
+    }
+    return localStorage.getItem('shopgenie.user_id') || 'default';
+  }
+  return 'default';
+}
+
 export async function sendChat(
   platform: Platform,
   message: string,
@@ -307,7 +320,10 @@ export async function sendChat(
 ): Promise<ChatApiResponse> {
   const response = await fetch('/shopgenie/api/chat', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'X-User-Id': getUserIdHeader()
+    },
     body: JSON.stringify({ platform, message, history, product_id: productId || null }),
     signal,
   });
@@ -321,7 +337,12 @@ export async function sendChat(
 }
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
+  const headers = new Headers(init?.headers);
+  headers.set('X-User-Id', getUserIdHeader());
+  const response = await fetch(url, {
+    ...init,
+    headers,
+  });
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { detail?: string } | null;
     throw new Error(body?.detail ?? '请求失败');
@@ -359,6 +380,31 @@ export const addContentVersion = (assetId: string, content: GeneratedContent, ch
 export const reviseContent = (assetId: string, instruction: string) => requestJson<ContentVersion>(`/shopgenie/api/content/${assetId}/revise`, {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ instruction }),
 });
+export const scheduleContentAsset = (assetId: string, scheduledAt: string | null) => requestJson<ContentAsset>(`/shopgenie/api/content/${assetId}/schedule`, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scheduled_at: scheduledAt }),
+});
+export const getMarketingCalendar = () => requestJson<MarketingCalendarData>('/shopgenie/api/marketing/calendar');
+
+export interface MarketingEvent {
+  id: string;
+  name: string;
+  date_range: string;
+  description: string;
+  platforms: Platform[];
+  topics: string[];
+}
+
+export interface ScheduledAssetSummary {
+  id: string;
+  name: string;
+  platform: Platform;
+  scheduled_at: string | null;
+}
+
+export interface MarketingCalendarData {
+  events: MarketingEvent[];
+  scheduled_assets: ScheduledAssetSummary[];
+}
 export const listKnowledge = () => requestJson<KnowledgeSource[]>('/shopgenie/api/knowledge');
 export const createKnowledge = (source: Omit<KnowledgeSource, 'id' | 'updated_at'>) => requestJson<KnowledgeSource>('/shopgenie/api/knowledge', {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(source),
@@ -376,6 +422,9 @@ export const runAgentTask = (objective: string, assetId: string) => requestJson<
 export const listPerformance = () => requestJson<PerformanceRecord[]>('/shopgenie/api/performance');
 export const getPerformanceInsights = () => requestJson<PerformanceInsights>('/shopgenie/api/performance/insights');
 export const getOperationsBrief = () => requestJson<OperationsBrief>('/shopgenie/api/operations/brief');
+export const updateOperationActionState = (actionId: string, state: 'open' | 'done' | 'dismissed', metricSnapshot = '') => requestJson<{ success: boolean }>(`/shopgenie/api/operations/actions/${actionId}/state`, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state, metric_snapshot: metricSnapshot }),
+});
 export const createPerformance = (record: Omit<PerformanceRecord, 'id' | 'recorded_at'>) => requestJson<PerformanceRecord>('/shopgenie/api/performance', {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(record),
 });

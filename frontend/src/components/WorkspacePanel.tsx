@@ -1,32 +1,30 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import useSWR from 'swr';
+import { swrKeys, swrFetcher } from '@/lib/swr-fetcher';
 import {
   addContentVersion,
   analyzeReviews,
   clearReviews,
   deleteExperiment,
   generateExperiment,
-  listExperiments,
   recordVariantMetrics,
   createKnowledge,
-  createCustomTemplate,
   createPerformance,
   createProduct,
-  deleteCustomTemplate,
   discoverKnowledge,
-  getDesignTemplates,
-  getPerformanceInsights,
   importKnowledge,
   listContentAssets,
   listContentVersions,
   listKnowledge,
   listPerformance,
-  listProducts,
   listTasks,
   reviseContent,
   runAgentTask,
   updateProduct,
+  scheduleContentAsset,
   type AgentTask,
   type ContentAsset,
   type ContentVersion,
@@ -38,6 +36,8 @@ import {
   type Product,
   type Experiment,
   type ExperimentVariant,
+  type MarketingEvent,
+  type MarketingCalendarData,
 } from '@/lib/api';
 import { toast } from '@/lib/toast';
 import { PLATFORM_LABELS, type Platform } from '@/lib/platforms';
@@ -45,7 +45,7 @@ import { useEscClose } from '@/hooks/useEscClose';
 import VersionDiff from './VersionDiff';
 import PerformanceCsvImport from './PerformanceCsvImport';
 
-export type WorkspaceTab = 'products' | 'content' | 'experiments' | 'knowledge' | 'tasks' | 'performance' | 'scene';
+export type WorkspaceTab = 'products' | 'content' | 'experiments' | 'knowledge' | 'tasks' | 'performance' | 'calendar';
 type Tab = WorkspaceTab;
 const split = (value: string) => value.split(/[、,，\n]/).map((item) => item.trim()).filter(Boolean);
 
@@ -57,36 +57,69 @@ interface WorkspacePanelProps {
   onActiveProductChange: (productId: string | null) => void;
   targetAssetId: string | null;
   initialTab?: WorkspaceTab;
+  prefillParams?: {
+    product_id?: string | null;
+    asset_id?: string | null;
+    platform?: Platform | null;
+    brief?: string | null;
+  } | null;
 }
 
-export default function WorkspacePanel({ open, onClose, activeProductId, productContextLocked, onActiveProductChange, targetAssetId, initialTab }: WorkspacePanelProps) {
+export default function WorkspacePanel({ open, onClose, activeProductId, productContextLocked, onActiveProductChange, targetAssetId, initialTab, prefillParams }: WorkspacePanelProps) {
   const [tab, setTab] = useState<Tab>('products');
-  const [products, setProducts] = useState<Product[]>([]);
-  const [assets, setAssets] = useState<ContentAsset[]>([]);
-  const [versions, setVersions] = useState<ContentVersion[]>([]);
-  const [sources, setSources] = useState<KnowledgeSource[]>([]);
-  const [tasks, setTasks] = useState<AgentTask[]>([]);
-  const [metrics, setMetrics] = useState<PerformanceRecord[]>([]);
-  const [insights, setInsights] = useState<PerformanceInsights | null>(null);
-  const [experiments, setExperiments] = useState<Experiment[]>([]);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const setQueryParams = (params: Record<string, string | null>) => {
+    const nextParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+    Object.entries(params).forEach(([key, val]) => {
+      if (val === null) {
+        nextParams.delete(key);
+      } else {
+        nextParams.set(key, val);
+      }
+    });
+    const query = nextParams.toString();
+    const pathname = (typeof window !== 'undefined' ? window.location.pathname : '').replace(/^\/shopgenie/, '') || '/';
+    const url = `${pathname}${query ? `?${query}` : ''}`;
+    router.replace(url, { scroll: false });
+  };
+
+  const { data: products = [], mutate: mutateProducts } = useSWR(swrKeys.products, swrFetcher.products);
+  const { data: assets = [], mutate: mutateAssets } = useSWR('/shopgenie/api/assets', listContentAssets);
+  const { data: sources = [], mutate: mutateSources } = useSWR('/shopgenie/api/knowledge', listKnowledge);
+  const { data: tasks = [], mutate: mutateTasks } = useSWR('/shopgenie/api/tasks', listTasks);
+  const { data: metrics = [], mutate: mutateMetrics } = useSWR('/shopgenie/api/performance', listPerformance);
+  const { data: insights, mutate: mutateInsights } = useSWR(swrKeys.insights, swrFetcher.insights);
+  const { data: experiments = [], mutate: mutateExperiments } = useSWR(swrKeys.experiments, swrFetcher.experiments);
+  const { data: calendarData, mutate: mutateCalendar } = useSWR(swrKeys.calendar, swrFetcher.calendar);
+
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+  const { data: versions = [], mutate: mutateVersions } = useSWR(
+    selectedAssetId ? `/shopgenie/api/assets/${selectedAssetId}/versions` : null,
+    () => listContentVersions(selectedAssetId!)
+  );
+
   const [error, setError] = useState('');
   useEscClose(open, onClose);
 
   const refresh = async () => {
     try {
-      const [nextProducts, nextAssets, nextSources, nextTasks, nextMetrics, nextInsights, nextExperiments] = await Promise.all([
-        listProducts(), listContentAssets(), listKnowledge(), listTasks(), listPerformance(), getPerformanceInsights(), listExperiments(),
+      await Promise.all([
+        mutateProducts(),
+        mutateAssets(),
+        mutateSources(),
+        mutateTasks(),
+        mutateMetrics(),
+        mutateInsights(),
+        mutateExperiments(),
+        mutateCalendar(),
       ]);
-      setProducts(nextProducts);
-      setAssets(nextAssets);
-      setSources(nextSources);
-      setTasks(nextTasks);
-      setMetrics(nextMetrics);
-      setInsights(nextInsights);
-      setExperiments(nextExperiments);
+      if (selectedAssetId) {
+        await mutateVersions();
+      }
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : '工作台加载失败');
+      setError(loadError instanceof Error ? loadError.message : '工作台数据更新失败');
     }
   };
 
@@ -100,6 +133,9 @@ export default function WorkspacePanel({ open, onClose, activeProductId, product
     if (!open) return;
     void Promise.resolve().then(() => {
       void refresh();
+      if (prefillParams?.product_id && prefillParams.product_id !== activeProductId) {
+        onActiveProductChange(prefillParams.product_id);
+      }
       if (targetAssetId) {
         setTab('content');
         setSelectedAssetId(targetAssetId);
@@ -107,12 +143,7 @@ export default function WorkspacePanel({ open, onClose, activeProductId, product
         setTab(initialTab);
       }
     });
-  }, [open, targetAssetId, initialTab]);
-
-  useEffect(() => {
-    if (!selectedAssetId) return;
-    listContentVersions(selectedAssetId).then(setVersions).catch((loadError: unknown) => setError(loadError instanceof Error ? loadError.message : '版本加载失败'));
-  }, [selectedAssetId]);
+  }, [open, targetAssetId, initialTab, prefillParams]);
 
   if (!open) return null;
 
@@ -125,28 +156,53 @@ export default function WorkspacePanel({ open, onClose, activeProductId, product
         </header>
         <nav className="workspace-tabs">
           {([
-            ['products', '商品库'], ['content', '内容资产'], ['experiments', 'A/B 实验'], ['knowledge', '知识来源'], ['tasks', 'Agent 任务'], ['performance', '效果数据'], ['scene', '场景'],
+            ['products', '商品库'], ['content', '内容资产'], ['experiments', 'A/B 实验'], ['knowledge', '知识来源'], ['tasks', 'Agent 任务'], ['performance', '效果数据'], ['calendar', '营销日历'],
           ] as [Tab, string][]).map(([value, label]) => <button className={tab === value ? 'active' : ''} key={value} onClick={() => setTab(value)}>{label}</button>)}
         </nav>
         {error && <div className="workspace-error">{error}</div>}
         <div className="workspace-body">
-          {tab === 'products' && <ProductsTab products={products} activeProductId={activeProductId} productContextLocked={productContextLocked} onSelect={onActiveProductChange} onCreated={refresh} />}
-          {tab === 'content' && <ContentTab key={versions[0]?.id ?? 'empty'} assets={assets} products={products} selectedAssetId={selectedAssetId} versions={versions} onSelect={setSelectedAssetId} onSaved={async () => { await refresh(); if (selectedAssetId) setVersions(await listContentVersions(selectedAssetId)); }} />}
-          {tab === 'experiments' && <ExperimentsTab experiments={experiments} products={products} activeProductId={activeProductId} onChanged={refresh} />}
+          {tab === 'products' && <ProductsTab products={products} activeProductId={activeProductId} productContextLocked={productContextLocked} onSelect={onActiveProductChange} onCreated={refresh} prefillParams={prefillParams} />}
+          {tab === 'content' && <ContentTab key={versions[0]?.id ?? 'empty'} assets={assets} products={products} selectedAssetId={selectedAssetId} versions={versions} onSelect={setSelectedAssetId} onSaved={refresh} />}
+          {tab === 'experiments' && <ExperimentsTab experiments={experiments} products={products} activeProductId={activeProductId} onChanged={refresh} prefillParams={prefillParams} />}
           {tab === 'knowledge' && <KnowledgeTab sources={sources} onCreated={refresh} />}
           {tab === 'tasks' && <TasksTab tasks={tasks} assets={assets} onCompleted={refresh} />}
-          {tab === 'performance' && <PerformanceTab assets={assets} metrics={metrics} insights={insights} onCreated={refresh} />}
-          {tab === 'scene' && <SceneTab />}
+          {tab === 'performance' && <PerformanceTab assets={assets} metrics={metrics} insights={insights ?? null} onCreated={refresh} prefillParams={prefillParams} />}
+          {tab === 'calendar' && (
+            <CalendarTab
+              calendarData={calendarData}
+              assets={assets}
+              onSaved={refresh}
+              onSelectTab={(newTab, assetId) => {
+                setTab(newTab);
+                if (assetId) setSelectedAssetId(assetId);
+              }}
+              onClose={onClose}
+              activeProductId={activeProductId}
+              products={products}
+            />
+          )}
         </div>
       </section>
     </div>
   );
 }
 
-export function ProductsTab({ products, activeProductId, productContextLocked = false, onSelect, onCreated }: {
+export function ProductsTab({ products, activeProductId, productContextLocked = false, onSelect, onCreated, prefillParams }: {
   products: Product[]; activeProductId: string | null; productContextLocked?: boolean; onSelect: (id: string | null) => void; onCreated: () => Promise<void>;
+  prefillParams?: { product_id?: string | null } | null;
 }) {
   const [editingId, setEditingId] = useState<string | 'new' | null>(activeProductId);
+
+  useEffect(() => {
+    Promise.resolve().then(() => {
+      if (prefillParams?.product_id) {
+        setEditingId(prefillParams.product_id);
+      } else {
+        setEditingId(activeProductId);
+      }
+    });
+  }, [prefillParams, activeProductId]);
+
   const selected = editingId === 'new' ? null : products.find((product) => product.id === editingId) ?? null;
 
   const selectProduct = (productId: string) => {
@@ -296,12 +352,30 @@ function ReviewChips({ title, tone, items }: { title: string; tone: string; item
 
 const cvr = (v: ExperimentVariant) => v.impressions > 0 ? (v.conversions / v.impressions * 100) : 0;
 
-function ExperimentsTab({ experiments, products, activeProductId, onChanged }: {
+function ExperimentsTab({ experiments, products, activeProductId, onChanged, prefillParams }: {
   experiments: Experiment[]; products: Product[]; activeProductId: string | null; onChanged: () => Promise<void>;
+  prefillParams?: {
+    product_id?: string | null;
+    asset_id?: string | null;
+    platform?: Platform | null;
+    brief?: string | null;
+  } | null;
 }) {
   const [platform, setPlatform] = useState<Platform>('xhs');
   const [brief, setBrief] = useState('');
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!prefillParams) return;
+    Promise.resolve().then(() => {
+      if (prefillParams.platform) {
+        setPlatform(prefillParams.platform as Platform);
+      }
+      if (prefillParams.brief) {
+        setBrief(prefillParams.brief);
+      }
+    });
+  }, [prefillParams]);
 
   const generate = async () => {
     if (busy) return;
@@ -358,6 +432,12 @@ function ExperimentCard({ experiment, products, onChanged }: { experiment: Exper
           <button className="review-clear" onClick={remove}>删除</button>
         </div>
       </div>
+      <div className={`exp-confidence-banner ${experiment.confidence_level}`}>
+        <span className="exp-confidence-icon">
+          {experiment.confidence_level === 'ready' ? '✅' : '⚠️'}
+        </span>
+        <span className="exp-confidence-text">{experiment.confidence_message}</span>
+      </div>
       <div className="exp-variants">
         {experiment.variants.map((v) => <VariantRow key={v.label} experimentId={experiment.id} variant={v} isWinner={experiment.winner_label === v.label} onChanged={onChanged} />)}
       </div>
@@ -386,6 +466,8 @@ function VariantRow({ experimentId, variant, isWinner, onChanged }: { experiment
     }
   };
 
+  const percent = Math.min(100, Math.round((variant.impressions / 300) * 100));
+
   return (
     <div className={`variant-row ${isWinner ? 'winner' : ''}`}>
       <div className="variant-head">
@@ -396,6 +478,19 @@ function VariantRow({ experimentId, variant, isWinner, onChanged }: { experiment
       </div>
       <div className="variant-title">{variant.title}</div>
       {variant.hook && <div className="variant-hook">开头：{variant.hook}</div>}
+      
+      {variant.impressions < 300 ? (
+        <div className="variant-progress-bar" title={`置信样本进度：${percent}%`}>
+          <div className="variant-progress-fill" style={{ width: `${percent}%` }} />
+          <span className="variant-progress-text">样本进度 {percent}% (还差 {300 - variant.impressions} 曝光)</span>
+        </div>
+      ) : (
+        <div className="variant-progress-bar ready">
+          <div className="variant-progress-fill" style={{ width: '100%' }} />
+          <span className="variant-progress-text">✓ 样本已足额 ({variant.impressions} 曝光)</span>
+        </div>
+      )}
+
       <div className="variant-metrics">
         <label>曝光<input type="number" min="0" value={imp} onChange={(e) => setImp(e.target.value)} /></label>
         <label>点击<input type="number" min="0" value={clk} onChange={(e) => setClk(e.target.value)} /></label>
@@ -415,6 +510,28 @@ function ContentTab({ assets, products, selectedAssetId, versions, onSelect, onS
   const [changeNote, setChangeNote] = useState('手动优化');
   const [instruction, setInstruction] = useState('');
   const [revising, setRevising] = useState(false);
+
+  const currentAsset = assets.find((a) => a.id === selectedAssetId);
+  const [scheduledAt, setScheduledAt] = useState(currentAsset?.scheduled_at ?? '');
+  const [scheduling, setScheduling] = useState(false);
+
+  useEffect(() => {
+    Promise.resolve().then(() => setScheduledAt(currentAsset?.scheduled_at ?? ''));
+  }, [selectedAssetId, currentAsset]);
+
+  const handleSchedule = async () => {
+    if (!selectedAssetId || scheduling) return;
+    setScheduling(true);
+    try {
+      await scheduleContentAsset(selectedAssetId, scheduledAt || null);
+      toast('发布排期已更新', 'success');
+      await onSaved();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : '排期更新失败');
+    } finally {
+      setScheduling(false);
+    }
+  };
 
   const save = async () => {
     if (!selectedAssetId || !latest) return;
@@ -457,6 +574,15 @@ function ContentTab({ assets, products, selectedAssetId, versions, onSelect, onS
             <strong>让 Agent 局部改写</strong>
             <div><input value={instruction} onChange={(event) => setInstruction(event.target.value)} placeholder="例如：保留标题，只把正文写得更像真实用户分享" /><button disabled={!instruction.trim() || revising} onClick={revise}>{revising ? '修改中…' : '创建新版本'}</button></div>
           </div>
+
+          <div className="content-schedule-box" style={{ background: 'rgba(255, 255, 255, 0.05)', padding: '12px', borderRadius: '8px', border: '1px solid var(--line)', marginBottom: '16px' }}>
+            <strong style={{ fontSize: '13px', display: 'block', marginBottom: '8px' }}>发布排期</strong>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input type="date" value={scheduledAt || ''} onChange={(e) => setScheduledAt(e.target.value)} style={{ flex: 1, padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--text)', fontSize: '13px' }} />
+              <button className="workspace-secondary" disabled={scheduling} style={{ whiteSpace: 'nowrap', padding: '4px 12px', fontSize: '12px' }} onClick={handleSchedule}>{scheduling ? '保存中…' : '设定排期'}</button>
+            </div>
+          </div>
+
           <label>标题<input value={title} onChange={(event) => setTitle(event.target.value)} /></label>
           <label>正文<textarea className="content-editor-body" value={body} onChange={(event) => setBody(event.target.value)} /></label>
           <label>本次修改说明<input value={changeNote} onChange={(event) => setChangeNote(event.target.value)} /></label>
@@ -518,103 +644,229 @@ function TasksTab({ tasks, assets, onCompleted }: { tasks: AgentTask[]; assets: 
   return <><div className="agent-runner"><div><span>Run an agent task</span><strong>让 Agent 读取事实、修改内容并重新质检</strong></div><select value={assetId} onChange={(event) => setAssetId(event.target.value)}><option value="">选择内容资产</option>{assets.map((asset) => <option value={asset.id} key={asset.id}>{asset.name}</option>)}</select><input value={objective} onChange={(event) => setObjective(event.target.value)} placeholder="例如：把这篇内容优化得更像真实买家分享，并修复所有质量问题" /><button disabled={!assetId || !objective.trim() || running} onClick={run}>{running ? '执行中…' : '执行任务'}</button></div><div className="task-grid">{tasks.length === 0 && <div className="workspace-empty">发起一次生成或执行任务后，这里会保留计划和结果。</div>}{tasks.map((task) => <article className="task-card" key={task.id}><span>{task.status === 'failed' ? 'Agent failed' : 'Agent plan'}</span><h3>{task.objective}</h3>{task.steps.map((step) => <div className={step.status} key={step.name}>{step.status === 'completed' ? '✓' : step.status === 'failed' ? '!' : '○'} {step.name}</div>)}{task.result_summary && <p>{task.result_summary}</p>}</article>)}</div></>;
 }
 
-function PerformanceTab({ assets, metrics, insights, onCreated }: { assets: ContentAsset[]; metrics: PerformanceRecord[]; insights: PerformanceInsights | null; onCreated: () => Promise<void> }) {
-  const [assetId, setAssetId] = useState(''); const [impressions, setImpressions] = useState(''); const [clicks, setClicks] = useState(''); const [conversions, setConversions] = useState('');
+function PerformanceTab({ assets, metrics, insights, onCreated, prefillParams }: {
+  assets: ContentAsset[]; metrics: PerformanceRecord[]; insights: PerformanceInsights | null; onCreated: () => Promise<void>;
+  prefillParams?: { asset_id?: string | null } | null;
+}) {
+  const [assetId, setAssetId] = useState('');
+  const [impressions, setImpressions] = useState('');
+  const [clicks, setClicks] = useState('');
+  const [conversions, setConversions] = useState('');
+  useEffect(() => {
+    if (!prefillParams?.asset_id) return;
+    Promise.resolve().then(() => setAssetId(prefillParams.asset_id ?? ''));
+  }, [prefillParams]);
+
   const create = async () => {
     const asset = assets.find((item) => item.id === assetId); if (!asset) return;
     await createPerformance({ asset_id: assetId, platform: asset.platform, impressions: Number(impressions) || 0, conversions: Number(conversions) || 0, engagements: 0, clicks: Number(clicks) || 0, add_to_carts: 0, orders: Number(conversions) || 0, refunds: 0, revenue: 0, ad_spend: 0, notes: '' });
     setImpressions(''); setClicks(''); setConversions(''); await onCreated();
   };
-  return <div className="workspace-grid"><div className="workspace-list">{insights && <div className="performance-summary"><div className="performance-kpis"><span><strong>{insights.click_rate}%</strong>CTR</span><span><strong>{insights.click_conversion_rate}%</strong>点击后成交</span><span><strong>{insights.refund_rate}%</strong>退款率</span><span><strong>{insights.roas}</strong>ROAS</span></div><p>{insights.summary}</p></div>}{metrics.map((metric) => <div className="workspace-list-item static" key={metric.id}><strong>{assets.find((item) => item.id === metric.asset_id)?.name ?? '内容资产'}</strong><span>曝光 {metric.impressions} · 点击 {metric.clicks} · 下单 {metric.orders || metric.conversions} · 退款 {metric.refunds}</span></div>)}</div><div className="workspace-editor"><div className="workspace-section-title">记录发布效果</div><label>内容<select value={assetId} onChange={(event) => setAssetId(event.target.value)}><option value="">选择内容资产</option>{assets.map((asset) => <option value={asset.id} key={asset.id}>{asset.name}</option>)}</select></label><label>曝光量<input type="number" min="0" value={impressions} onChange={(event) => setImpressions(event.target.value)} /></label><label>点击量<input type="number" min="0" value={clicks} onChange={(event) => setClicks(event.target.value)} /></label><label>转化数<input type="number" min="0" value={conversions} onChange={(event) => setConversions(event.target.value)} /></label><button className="workspace-primary" disabled={!assetId} onClick={create}>记录效果</button><PerformanceCsvImport assets={assets} onImported={onCreated} /></div></div>;
+
+  return (
+    <div className="workspace-grid">
+      <div className="workspace-list">
+        {insights && (
+          <div className="performance-summary">
+            <div className="performance-kpis">
+              <span><strong>{insights.click_rate}%</strong>CTR</span>
+              <span><strong>{insights.click_conversion_rate}%</strong>点击后成交</span>
+              <span><strong>{insights.refund_rate}%</strong>退款率</span>
+              <span><strong>{insights.roas}</strong>ROAS</span>
+            </div>
+            <p>{insights.summary}</p>
+          </div>
+        )}
+        {metrics.map((metric) => (
+          <div className="workspace-list-item static" key={metric.id}>
+            <strong>{assets.find((item) => item.id === metric.asset_id)?.name ?? '内容资产'}</strong>
+            <span>曝光 {metric.impressions} · 点击 {metric.clicks} · 下单 {metric.orders || metric.conversions} · 退款 {metric.refunds}</span>
+          </div>
+        ))}
+      </div>
+      <div className="workspace-editor">
+        <div className="workspace-section-title">记录发布效果</div>
+        <label>内容
+          <select value={assetId} onChange={(event) => setAssetId(event.target.value)}>
+            <option value="">选择内容资产</option>
+            {assets.map((asset) => <option value={asset.id} key={asset.id}>{asset.name}</option>)}
+          </select>
+        </label>
+        <label>曝光量<input type="number" min="0" value={impressions} onChange={(event) => setImpressions(event.target.value)} /></label>
+        <label>点击量<input type="number" min="0" value={clicks} onChange={(event) => setClicks(event.target.value)} /></label>
+        <label>转化数<input type="number" min="0" value={conversions} onChange={(event) => setConversions(event.target.value)} /></label>
+        <button className="workspace-primary" disabled={!assetId} onClick={create}>记录效果</button>
+        <PerformanceCsvImport assets={assets} onImported={onCreated} />
+      </div>
+    </div>
+  );
 }
 
-function SceneTab() {
-  const [tmpl, setTmpl] = useState<DesignTemplates | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [error, setError] = useState('');
-  // New template form
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [promptTemplate, setPromptTemplate] = useState('');
-  const [aspectRatio, setAspectRatio] = useState('1:1');
-  const [tags, setTags] = useState('');
-  const [category, setCategory] = useState('lifestyle');
-  const [saving, setSaving] = useState(false);
-  const [showNew, setShowNew] = useState(false);
+function CalendarTab({
+  calendarData,
+  assets,
+  onSaved,
+  onSelectTab,
+  onClose,
+  activeProductId,
+  products,
+}: {
+  calendarData?: MarketingCalendarData;
+  assets: ContentAsset[];
+  onSaved: () => Promise<void>;
+  onSelectTab: (tab: WorkspaceTab, assetId: string | null) => void;
+  onClose: () => void;
+  activeProductId: string | null;
+  products: Product[];
+}) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
-  const refresh = async () => {
-    try { const d = await getDesignTemplates(); setTmpl(d); } catch { /* ignore */ }
+  const setQueryParams = (params: Record<string, string | null>) => {
+    const nextParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+    Object.entries(params).forEach(([key, val]) => {
+      if (val === null) {
+        nextParams.delete(key);
+      } else {
+        nextParams.set(key, val);
+      }
+    });
+    const query = nextParams.toString();
+    const pathname = (typeof window !== 'undefined' ? window.location.pathname : '').replace(/^\/shopgenie/, '') || '/';
+    const url = `${pathname}${query ? `?${query}` : ''}`;
+    router.replace(url, { scroll: false });
   };
-  useEffect(() => { getDesignTemplates().then(setTmpl).catch(() => { /* ignore */ }); }, []);
 
-  const all = tmpl?.templates ?? [];
-  const selected = all.find(t => t.id === selectedId) ?? null;
+  const events = calendarData?.events ?? [];
+  const scheduledAssets = calendarData?.scheduled_assets ?? [];
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
 
-  const handleCreate = async () => {
-    if (!name.trim() || !promptTemplate.trim() || saving) return;
-    setSaving(true);
+  useEffect(() => {
+    if (events.length === 0 || selectedEventId) return;
+    const firstId = events[0].id;
+    Promise.resolve().then(() => setSelectedEventId(firstId));
+  }, [events, selectedEventId]);
+
+  const selectedEvent = events.find((e) => e.id === selectedEventId) ?? null;
+
+  const handleCancelSchedule = async (assetId: string) => {
     try {
-      await createCustomTemplate({
-        name: name.trim(), description: description.trim(), prompt_template: promptTemplate.trim(),
-        aspect_ratio: aspectRatio, tags: split(tags), category,
-      });
-      setName(''); setDescription(''); setPromptTemplate(''); setTags(''); setAspectRatio('1:1'); setCategory('lifestyle');
-      setShowNew(false);
-      await refresh();
-    } catch (e) { setError(e instanceof Error ? e.message : '创建失败'); }
-    finally { setSaving(false); }
+      await scheduleContentAsset(assetId, null);
+      toast('排期已取消', 'info');
+      await onSaved();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : '取消排期失败');
+    }
   };
 
-  const handleDelete = async () => {
-    if (!selected || selected.builtin) return;
-    try {
-      await deleteCustomTemplate(selected.id);
-      setSelectedId(null);
-      await refresh();
-    } catch (e) { setError(e instanceof Error ? e.message : '删除失败'); }
-  };
+  return (
+    <div className="workspace-grid">
+      <div className="workspace-list">
+        <div className="workspace-section-title">营销节点排期</div>
+        {events.length === 0 ? (
+          <div className="workspace-empty">加载营销日历中…</div>
+        ) : (
+          events.map((event) => (
+            <button
+              className={`workspace-list-item calendar-node-item ${selectedEventId === event.id ? 'selected' : ''}`}
+              key={event.id}
+              onClick={() => setSelectedEventId(event.id)}
+            >
+              <div className="calendar-node-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 4 }}>
+                <strong>{event.name}</strong>
+                <span className="calendar-node-date" style={{ fontSize: '11px', color: 'var(--muted)' }}>{event.date_range}</span>
+              </div>
+              <div className="calendar-node-platforms" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {event.platforms.map((p) => (
+                  <span className={`platform-badge mini ${p}`} key={p} style={{ fontSize: '10px', padding: '1px 4px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)' }}>
+                    {p === 'xhs' ? '小红书' : p === 'dy' ? '抖音' : p === 'amazon' ? 'Amazon' : p}
+                  </span>
+                ))}
+              </div>
+            </button>
+          ))
+        )}
+      </div>
 
-  return <div className="workspace-grid">
-    <div className="workspace-list">
-      <div className="workspace-section-title">场景模板库<button onClick={() => { setShowNew(true); setSelectedId(null); }} style={{ border: '1px solid var(--line)', borderRadius: 6, fontSize: 10, padding: '2px 8px', cursor: 'pointer', background: 'var(--surface)', marginLeft: 8 }}>+ 新建</button></div>
-      {all.length === 0 && <div className="workspace-empty">模板加载中…</div>}
-      {all.map(t => (
-        <button className={`workspace-list-item${selectedId === t.id ? ' selected' : ''}`} key={t.id} onClick={() => { setSelectedId(t.id); setShowNew(false); }}>
-          <strong>{t.name}</strong>
-          <span>{t.aspect_ratio} · {t.description.slice(0, 40)}{t.description.length > 40 ? '…' : ''}</span>
-        </button>
-      ))}
-    </div>
-    <div className="workspace-editor">
-      {error && <div className="workspace-error">{error}<button onClick={() => setError('')} style={{ marginLeft: 8, border: 'none', background: 'none', cursor: 'pointer' }}>✕</button></div>}
+      <div className="workspace-editor">
+        {selectedEvent ? (
+          <>
+            <div className="calendar-event-details" style={{ marginBottom: 20 }}>
+              <div className="workspace-section-title">{selectedEvent.name} <span style={{ fontSize: '12px', fontWeight: 'normal', color: 'var(--muted)', marginLeft: 8 }}>{selectedEvent.date_range}</span></div>
+              <p className="calendar-event-desc" style={{ fontSize: '13px', color: 'var(--muted)', lineHeight: '1.5', margin: '8px 0 16px' }}>{selectedEvent.description}</p>
+              
+              <div className="calendar-topics-section">
+                <strong style={{ display: 'block', fontSize: '13px', marginBottom: 12 }}>品类选题推荐</strong>
+                <div className="calendar-topic-cards" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {selectedEvent.topics.map((topic, i) => (
+                    <div className="calendar-topic-card" key={i} style={{ background: 'rgba(255,255,255,0.03)', padding: 12, borderRadius: 8, border: '1px solid var(--line)' }}>
+                      <p className="calendar-topic-text" style={{ fontSize: '13px', margin: '0 0 10px', lineHeight: '1.4' }}>{topic}</p>
+                      <div className="calendar-topic-actions" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {selectedEvent.platforms.map((p) => (
+                          <button
+                            key={p}
+                            className="workspace-secondary"
+                            style={{ fontSize: '11px', padding: '3px 8px', borderRadius: 4 }}
+                            onClick={() => {
+                              setQueryParams({
+                                action: 'create',
+                                platform: p,
+                                brief: topic,
+                                product_id: activeProductId,
+                                workspace: null,
+                              });
+                              onClose();
+                            }}
+                          >
+                            去 {p === 'xhs' ? '小红书' : p === 'dy' ? '抖音' : p === 'amazon' ? 'Amazon' : p} 创作
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
 
-      {showNew ? (<>
-        <div className="workspace-section-title">新建场景模板</div>
-        <label>模板名称<input value={name} onChange={e => setName(e.target.value)} placeholder="例如：秋季暖光场景" maxLength={50} /></label>
-        <label>描述<input value={description} onChange={e => setDescription(e.target.value)} placeholder="适用场景说明" maxLength={200} /></label>
-        <label>Prompt 模板<textarea className="content-editor-body" value={promptTemplate} onChange={e => setPromptTemplate(e.target.value)} placeholder="英文 prompt，可用 {product} 占位产品名" rows={5} maxLength={1000} /></label>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <label style={{ flex: 1 }}>比例<select value={aspectRatio} onChange={e => setAspectRatio(e.target.value)}>{['1:1','4:5','16:9','9:16'].map(v => <option key={v} value={v}>{v}</option>)}</select></label>
-          <label style={{ flex: 1 }}>分类<select value={category} onChange={e => setCategory(e.target.value)}>{Object.entries(tmpl?.categories ?? {}).map(([k, v]) => <option key={k} value={k}>{v.name}</option>)}</select></label>
-        </div>
-        <label>标签（逗号分隔）<input value={tags} onChange={e => setTags(e.target.value)} placeholder="简约, 自然光" /></label>
-        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-          <button className="workspace-primary" onClick={handleCreate} disabled={!name.trim() || !promptTemplate.trim() || saving}>{saving ? '创建中…' : '保存模板'}</button>
-          <button className="workspace-secondary" onClick={() => setShowNew(false)}>取消</button>
-        </div>
-      </>) : selected ? (<>
-        <div className="workspace-section-title">{selected.name}<span style={{ fontSize: 10, color: 'var(--muted)', marginLeft: 8 }}>{selected.builtin ? '内置' : '自定义'}</span></div>
-        <div className="knowledge-meta">
-          <span className="knowledge-tag">{selected.aspect_ratio}</span>
-          {selected.tags.map(t => <span className="knowledge-type" key={t}>{t}</span>)}
-        </div>
-        <div className="workspace-section-title" style={{ marginTop: 12 }}>描述</div>
-        <div className="knowledge-content">{selected.description || '无描述'}</div>
-        <div className="workspace-section-title" style={{ marginTop: 12 }}>Prompt 模板</div>
-        <div className="knowledge-content" style={{ fontFamily: 'monospace', fontSize: 12, whiteSpace: 'pre-wrap', maxHeight: 300, overflow: 'auto' }}>{selected.prompt_template || '(无)'}</div>
-        {!selected.builtin && <button className="workspace-secondary" onClick={handleDelete} style={{ marginTop: 12, color: '#c44' }}>删除此模板</button>}
-        <button className="workspace-secondary" onClick={() => setSelectedId(null)} style={{ marginTop: 8 }}>返回列表</button>
-      </>) : <div className="workspace-empty">选择一个模板查看其 Prompt，或点击「+ 新建」创建自定义场景模板。</div>}
+            <div className="calendar-scheduled-section" style={{ borderTop: '1px solid var(--line)', paddingTop: 20, marginTop: 20 }}>
+              <div className="workspace-section-title">已排期发布内容</div>
+              {scheduledAssets.length === 0 ? (
+                <div className="workspace-empty" style={{ padding: '20px 0', fontSize: '12px' }}>此节点暂无排期内容。可在“内容资产”详情中为此节日设定发布日期。</div>
+              ) : (
+                <div className="calendar-scheduled-list" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {scheduledAssets.map((asset) => (
+                    <div className="calendar-scheduled-item" key={asset.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: 6, border: '1px solid var(--line)' }}>
+                      <div className="scheduled-item-info" style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden' }}>
+                        <span className="scheduled-date" style={{ fontSize: '11px', color: 'var(--coral)', background: 'rgba(255, 107, 107, 0.1)', padding: '2px 6px', borderRadius: 4, fontFamily: 'monospace' }}>{asset.scheduled_at}</span>
+                        <span className={`platform-badge mini ${asset.platform}`} style={{ fontSize: '10px', padding: '2px 4px', borderRadius: 4 }}>
+                          {asset.platform === 'xhs' ? '小红书' : asset.platform === 'dy' ? '抖音' : asset.platform === 'amazon' ? 'Amazon' : asset.platform}
+                        </span>
+                        <strong
+                          className="scheduled-title"
+                          onClick={() => onSelectTab('content', asset.id)}
+                          style={{ cursor: 'pointer', textDecoration: 'underline', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }}
+                          title="跳转至内容详情"
+                        >
+                          {asset.name}
+                        </strong>
+                      </div>
+                      <button
+                        className="review-clear scheduled-cancel-btn"
+                        style={{ color: 'var(--muted)', fontSize: '11px', padding: '2px 6px', border: 'none', background: 'none', cursor: 'pointer' }}
+                        onClick={() => handleCancelSchedule(asset.id)}
+                      >
+                        取消排期
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="workspace-empty">选择营销节点查看选题推荐与排期。</div>
+        )}
+      </div>
     </div>
-  </div>;
+  );
 }

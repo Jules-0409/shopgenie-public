@@ -56,3 +56,9 @@ class ChatResponse(BaseModel):
     quality: dict[str, Any] | None = None
     task_id: str | None = None
     sources: list[dict[str, str]] = Field(default_factory=list, max_length=5)
+
+
+class ActionStateRequest(BaseModel):
+    state: str = Field(pattern="^(open|done|dismissed)$")
+    metric_snapshot: str = Field(default="", max_length=500)
+

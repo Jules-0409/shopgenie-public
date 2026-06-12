@@ -33,6 +33,6 @@ describe('OperationsHub', () => {
     expect(screen.getByText('需要关注')).toBeInTheDocument();
     fireEvent.click(screen.getByText('回填第一条内容的发布效果'));
 
-    expect(onOpen).toHaveBeenCalledWith('performance');
+    expect(onOpen).toHaveBeenCalledWith('performance', expect.any(Object));
   });
 });

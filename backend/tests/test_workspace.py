@@ -127,16 +127,19 @@ def test_performance_prompt_feeds_back_product_results(tmp_path: Path) -> None:
 def test_operations_brief_prioritizes_low_click_and_low_conversion(tmp_path: Path) -> None:
     use_db(tmp_path)
     product = save_product(Product(name="保温杯", review_insights={"summary": "轻便"}))
-    asset, _ = create_content_asset(content(), product.id)
+    
+    asset1, _ = create_content_asset(content(), product.id)
     save_performance(PerformanceRecord(
-        asset_id=asset.id,
+        asset_id=asset1.id,
         platform="xhs",
         impressions=1000,
         clicks=5,
         conversions=0,
     ))
-    second = save_performance(PerformanceRecord(
-        asset_id=asset.id,
+    
+    asset2, _ = create_content_asset(content(), product.id)
+    save_performance(PerformanceRecord(
+        asset_id=asset2.id,
         platform="xhs",
         impressions=500,
         clicks=100,
@@ -147,8 +150,8 @@ def test_operations_brief_prioritizes_low_click_and_low_conversion(tmp_path: Pat
 
     assert brief["status"] == "attention"
     ids = [action["id"] for action in brief["actions"]]
-    assert any(action_id.startswith("low-click-") for action_id in ids)
-    assert f"low-conversion-{second.id}" in ids
+    assert f"low-click-{asset1.id}" in ids
+    assert f"low-conversion-{asset2.id}" in ids
 
 
 def test_operations_brief_has_onboarding_and_healthy_states(tmp_path: Path) -> None:
@@ -239,11 +242,77 @@ def test_operations_brief_flags_high_refund_rate(tmp_path: Path) -> None:
     use_db(tmp_path)
     product = save_product(Product(name="保温杯", review_insights={"summary": "轻便"}))
     asset, _ = create_content_asset(content(), product.id)
-    record = save_performance(PerformanceRecord(
+    save_performance(PerformanceRecord(
         asset_id=asset.id, platform="xhs", impressions=1000, clicks=100,
         orders=20, conversions=20, refunds=5,
     ))
 
     ids = [action["id"] for action in build_operations_brief()["actions"]]
+    assert f"high-refund-{asset.id}" in ids
 
-    assert f"high-refund-{record.id}" in ids
+
+def test_operations_action_dismissal_and_reset(tmp_path: Path) -> None:
+    use_db(tmp_path)
+    from app.workspace import save_action_state, get_action_states
+    
+    # 1. Initially, no actions have state overrides
+    states = get_action_states()
+    assert states == {}
+
+    # 2. Save action state to dismissed
+    action_id = "test-action-123"
+    save_action_state(action_id, "dismissed", "metric_snapshot_data")
+    
+    states = get_action_states()
+    assert action_id in states
+    assert states[action_id]["state"] == "dismissed"
+    assert states[action_id]["metric_snapshot"] == "metric_snapshot_data"
+
+
+def test_operations_brief_respects_dismissal_and_resets_on_new_data(tmp_path: Path) -> None:
+    use_db(tmp_path)
+    from app.workspace import save_action_state, save_performance
+    from datetime import UTC, datetime, timedelta
+    
+    product = save_product(Product(name="保温杯", review_insights={"summary": "轻便"}))
+    asset, _ = create_content_asset(content(), product.id)
+    
+    past_time = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+    # Trigger a low CTR action
+    save_performance(PerformanceRecord(
+        asset_id=asset.id,
+        platform="xhs",
+        impressions=1000,
+        clicks=5,
+        conversions=0,
+        recorded_at=past_time
+    ))
+    
+    # Verify the action is in brief
+    brief = build_operations_brief()
+    action_ids = [action["id"] for action in brief["actions"]]
+    assert f"low-click-{asset.id}" in action_ids
+    
+    # Dismiss the action
+    save_action_state(f"low-click-{asset.id}", "dismissed")
+    
+    # Verify the action is hidden now
+    brief = build_operations_brief()
+    action_ids = [action["id"] for action in brief["actions"]]
+    assert f"low-click-{asset.id}" not in action_ids
+    
+    # Import new performance data with recorded_at after the dismissal
+    future_time = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
+    save_performance(PerformanceRecord(
+        asset_id=asset.id,
+        platform="xhs",
+        impressions=1000,
+        clicks=5,
+        conversions=0,
+        recorded_at=future_time
+    ))
+    
+    # Verify the action is reset and visible again!
+    brief = build_operations_brief()
+    action_ids = [action["id"] for action in brief["actions"]]
+    assert f"low-click-{asset.id}" in action_ids
