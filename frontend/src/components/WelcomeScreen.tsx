@@ -121,7 +121,7 @@ const greeting = () => {
 };
 
 interface WelcomeScreenProps {
-  onSelect: (platform: ActivePlatform, title: string) => void;
+  onSelect: (platform: ActivePlatform, starterText: string) => void;
   profile: UserProfile | null;
   onProfileOpen?: () => void;
   onOpenWorkspace?: (tab: WorkspaceTab, params?: { product_id?: string | null; asset_id?: string | null; platform?: string | null; brief?: string | null }) => void;
@@ -145,28 +145,35 @@ export default function WelcomeScreen({ onSelect, profile, onOpenWorkspace, onBa
         <div className="quick-creator">
           <div className="ops-hub-divider"><span>快捷创作入口</span></div>
           <div className="creator-grid">
-            <button className="creator-btn xhs" onClick={() => onSelect('xhs', '小红书种草笔记')}>
+            <button className="creator-btn xhs" onClick={() => onSelect('xhs', '我想写一篇小红书种草笔记，产品是：')}>
               <span className="creator-icon"><PlatformIcon platform="xhs" /></span>
               <div className="creator-btn-copy">
                 <strong>小红书笔记</strong>
                 <span>种草与爆款标题生成</span>
               </div>
             </button>
-            <button className="creator-btn dy" onClick={() => onSelect('dy', '抖音短视频脚本')}>
+            <button className="creator-btn dy" onClick={() => onSelect('dy', '我想写一个抖音短视频脚本，产品是：')}>
               <span className="creator-icon"><PlatformIcon platform="dy" /></span>
               <div className="creator-btn-copy">
-                <strong>抖音视频</strong>
+                <strong>抖音短视频脚本</strong>
                 <span>带货与宣传脚本创作</span>
               </div>
             </button>
-            <button className="creator-btn amazon" onClick={() => onSelect('amazon', 'Amazon Listing')}>
+            <button className="creator-btn dy-copy" onClick={() => onSelect('dy', '我想生成抖音小店商品文案，包含商品标题和商品详情，产品是：')}>
+              <span className="creator-icon"><PlatformIcon platform="dy" /></span>
+              <div className="creator-btn-copy">
+                <strong>抖音商品文案</strong>
+                <span>小店标题与商品详情</span>
+              </div>
+            </button>
+            <button className="creator-btn amazon" onClick={() => onSelect('amazon', 'I want to create an Amazon listing. Product facts: ')}>
               <span className="creator-icon"><PlatformIcon platform="amazon" /></span>
               <div className="creator-btn-copy">
                 <strong>Amazon Listing</strong>
                 <span>高转化标题与五点描述</span>
               </div>
             </button>
-            <button className="creator-btn cs" onClick={() => onSelect('cs', '客服话术')}>
+            <button className="creator-btn cs" onClick={() => onSelect('cs', '我需要客服话术，商品是：')}>
               <span className="creator-icon"><PlatformIcon platform="cs" /></span>
               <div className="creator-btn-copy">
                 <strong>客服话术</strong>

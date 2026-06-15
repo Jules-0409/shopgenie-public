@@ -59,6 +59,9 @@ export function useChat(defaultProductId: string | null) {
   const [hydrated, setHydrated] = useState(false);
   const idCounter = useRef(1);
   const abortRef = useRef<AbortController | null>(null);
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 服务端恢复的会话已是最新版本，只有后续对象引用变化时才需要回写。
+  const lastPersistedRef = useRef<Map<string, Conversation>>(new Map());
 
   const activeConversation = useMemo(
     () => conversations.find((c) => c.id === activeId) ?? null,
@@ -105,7 +108,8 @@ export function useChat(defaultProductId: string | null) {
           return (sb?.updated_at ?? '').localeCompare(sa?.updated_at ?? '');
         });
         setConversations([...restored, DEMO_CONVERSATION]);
-        setActiveId(restored[0].id);
+        setActiveId(restored[0]?.id ?? 'demo-xhs');
+        lastPersistedRef.current = new Map(restored.map((conversation) => [conversation.id, conversation]));
         idCounter.current = restored.reduce((max, c) => {
           const maxId = c.messages.reduce((m, msg) => {
             const num = parseInt(msg.id.replace('message-', ''), 10);
@@ -150,10 +154,6 @@ export function useChat(defaultProductId: string | null) {
     }
     setHydrated(true);
   }, []);
-
-  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // 记录每个会话上次写入后端时的对象引用；state 不可变更新保证"变过的会话引用必然不同"
-  const lastPersistedRef = useRef<Map<string, Conversation>>(new Map());
 
   const persist = useCallback(() => {
     if (!hydrated) return;

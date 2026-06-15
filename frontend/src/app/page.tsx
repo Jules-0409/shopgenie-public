@@ -106,9 +106,9 @@ function Home() {
     setView('welcome');
   };
 
-  const startFromPlatform = (actionPlatform: ActivePlatform) => {
+  const startFromPlatform = (actionPlatform: ActivePlatform, prompt?: string) => {
     setPendingPlatform(actionPlatform);
-    setDraft(starterText[actionPlatform]);
+    setDraft(prompt ?? starterText[actionPlatform]);
     chat.setActiveId(null);
     setView('chat');
   };

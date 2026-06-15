@@ -998,7 +998,7 @@ body::after {
   color: var(--xhs);
 }
 
-.creator-btn.dy .creator-icon {
+.creator-btn.dy .creator-icon, .creator-btn.dy-copy .creator-icon {
   background: rgba(25, 24, 22, 0.08);
   color: var(--dy);
 }
