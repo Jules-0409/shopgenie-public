@@ -11,7 +11,7 @@ export const swrKeys = {
 
 export const swrFetcher = {
   products: () => listProducts(),
-  experiments: (productId?: string | null) => listExperiments(productId),
+  experiments: () => listExperiments(),
   assets: () => listContentAssets(),
   insights: () => getPerformanceInsights(),
   brief: () => getOperationsBrief(),

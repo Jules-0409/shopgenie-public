@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { swrKeys, swrFetcher } from '@/lib/swr-fetcher';
 import {
@@ -19,30 +19,31 @@ import {
   listContentVersions,
   listKnowledge,
   listPerformance,
+  listPlatformConnectors,
   listTasks,
   reviseContent,
   runAgentTask,
   updateProduct,
   scheduleContentAsset,
+  syncPlatformConnector,
   type AgentTask,
   type ContentAsset,
   type ContentVersion,
-  type ImageTemplate,
-  type DesignTemplates,
   type KnowledgeSource,
   type PerformanceRecord,
   type PerformanceInsights,
   type Product,
   type Experiment,
   type ExperimentVariant,
-  type MarketingEvent,
   type MarketingCalendarData,
+  type PlatformConnectorStatus,
 } from '@/lib/api';
 import { toast } from '@/lib/toast';
-import { PLATFORM_LABELS, type Platform } from '@/lib/platforms';
+import { ACTIVE_PLATFORMS, PLATFORM_LABELS, type Platform } from '@/lib/platforms';
 import { useEscClose } from '@/hooks/useEscClose';
 import VersionDiff from './VersionDiff';
 import PerformanceCsvImport from './PerformanceCsvImport';
+import WorkspaceTabs, { workspaceTabMeta, workspaceTabNeeds } from './WorkspaceTabs';
 
 export type WorkspaceTab = 'products' | 'content' | 'experiments' | 'knowledge' | 'tasks' | 'performance' | 'calendar';
 type Tab = WorkspaceTab;
@@ -63,19 +64,23 @@ interface WorkspacePanelProps {
     platform?: Platform | null;
     brief?: string | null;
   } | null;
+  presentation?: 'modal' | 'page';
+  onTabChange?: (tab: WorkspaceTab) => void;
 }
 
-export default function WorkspacePanel({ open, onClose, activeProductId, productContextLocked, onActiveProductChange, onCreateFromTopic, targetAssetId, initialTab, prefillParams }: WorkspacePanelProps) {
-  const [tab, setTab] = useState<Tab>('products');
+export default function WorkspacePanel({ open, onClose, activeProductId, productContextLocked, onActiveProductChange, onCreateFromTopic, targetAssetId, initialTab, prefillParams, presentation = 'modal', onTabChange }: WorkspacePanelProps) {
+  const [tab, setTab] = useState<Tab>(targetAssetId ? 'content' : initialTab ?? 'products');
+  const routeMeta = workspaceTabMeta(tab);
+  const needs = workspaceTabNeeds(tab);
 
-  const { data: products = [], mutate: mutateProducts } = useSWR(swrKeys.products, swrFetcher.products);
-  const { data: assets = [], mutate: mutateAssets } = useSWR('/shopgenie/api/assets', listContentAssets);
-  const { data: sources = [], mutate: mutateSources } = useSWR('/shopgenie/api/knowledge', listKnowledge);
-  const { data: tasks = [], mutate: mutateTasks } = useSWR('/shopgenie/api/tasks', listTasks);
-  const { data: metrics = [], mutate: mutateMetrics } = useSWR('/shopgenie/api/performance', listPerformance);
-  const { data: insights, mutate: mutateInsights } = useSWR(swrKeys.insights, swrFetcher.insights);
-  const { data: experiments = [], mutate: mutateExperiments } = useSWR(swrKeys.experiments, swrFetcher.experiments);
-  const { data: calendarData, mutate: mutateCalendar } = useSWR(swrKeys.calendar, swrFetcher.calendar);
+  const { data: products = [], mutate: mutateProducts } = useSWR(needs.products ? swrKeys.products : null, swrFetcher.products);
+  const { data: assets = [], mutate: mutateAssets } = useSWR(needs.assets ? swrKeys.assets : null, listContentAssets);
+  const { data: sources = [], mutate: mutateSources } = useSWR(needs.knowledge ? '/shopgenie/api/knowledge' : null, listKnowledge);
+  const { data: tasks = [], mutate: mutateTasks } = useSWR(needs.tasks ? '/shopgenie/api/tasks' : null, listTasks);
+  const { data: metrics = [], mutate: mutateMetrics } = useSWR(needs.performance ? '/shopgenie/api/performance' : null, listPerformance);
+  const { data: insights, mutate: mutateInsights } = useSWR(needs.performance ? swrKeys.insights : null, swrFetcher.insights);
+  const { data: experiments = [], mutate: mutateExperiments } = useSWR(needs.experiments ? swrKeys.experiments : null, swrFetcher.experiments);
+  const { data: calendarData, mutate: mutateCalendar } = useSWR(needs.calendar ? swrKeys.calendar : null, swrFetcher.calendar);
 
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const { data: versions = [], mutate: mutateVersions } = useSWR(
@@ -107,10 +112,10 @@ export default function WorkspacePanel({ open, onClose, activeProductId, product
   };
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || presentation === 'page') return;
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = ''; };
-  }, [open]);
+  }, [open, presentation]);
 
   useEffect(() => {
     if (!open) return;
@@ -131,17 +136,13 @@ export default function WorkspacePanel({ open, onClose, activeProductId, product
   if (!open) return null;
 
   return (
-    <div className="workspace-overlay" onClick={onClose}>
-      <section className="workspace-panel" onClick={(event) => event.stopPropagation()}>
+    <div className={presentation === 'page' ? 'workspace-route-shell' : 'workspace-overlay'} onClick={presentation === 'modal' ? onClose : undefined}>
+      <section className={`workspace-panel ${presentation === 'page' ? 'workspace-panel-page' : ''}`} onClick={(event) => event.stopPropagation()}>
         <header className="workspace-header">
-          <div><span>Content OS</span><h2>内容工作台</h2><p>商品事实、内容版本、规则知识和发布效果都在这里。</p></div>
-          <button onClick={onClose}>关闭</button>
+          <div><span>Content OS</span><h2>{presentation === 'page' ? routeMeta.label : '内容工作台'}</h2><p>{presentation === 'page' ? routeMeta.description : '商品事实、内容版本、规则知识和发布效果都在这里。'}</p></div>
+          <button onClick={onClose}>{presentation === 'page' ? '返回对话' : '关闭'}</button>
         </header>
-        <nav className="workspace-tabs">
-          {([
-            ['products', '商品库'], ['content', '内容资产'], ['experiments', 'A/B 实验'], ['knowledge', '知识来源'], ['tasks', 'Agent 任务'], ['performance', '效果数据'], ['calendar', '营销日历'],
-          ] as [Tab, string][]).map(([value, label]) => <button className={tab === value ? 'active' : ''} key={value} onClick={() => setTab(value)}>{label}</button>)}
-        </nav>
+        <WorkspaceTabs activeTab={tab} onSelect={(value) => { setTab(value); onTabChange?.(value); }} />
         {error && <div className="workspace-error">{error}</div>}
         <div className="workspace-body">
           {tab === 'products' && <ProductsTab products={products} activeProductId={activeProductId} productContextLocked={productContextLocked} onSelect={onActiveProductChange} onCreated={refresh} prefillParams={prefillParams} />}
@@ -153,16 +154,13 @@ export default function WorkspacePanel({ open, onClose, activeProductId, product
           {tab === 'calendar' && (
             <CalendarTab
               calendarData={calendarData}
-              assets={assets}
               onSaved={refresh}
               onSelectTab={(newTab, assetId) => {
                 setTab(newTab);
                 if (assetId) setSelectedAssetId(assetId);
               }}
-              onClose={onClose}
               onCreateFromTopic={onCreateFromTopic}
               activeProductId={activeProductId}
-              products={products}
             />
           )}
         </div>
@@ -610,7 +608,7 @@ function KnowledgeTab({ sources, onCreated }: { sources: KnowledgeSource[]; onCr
   </>) : (<>
     <div className="workspace-section-title">发现最新规则、趋势或竞品资料</div>
     <label>检索主题<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="例如：2026 小红书家居好物内容趋势" /></label>
-    <label>平台<select value={platform} onChange={(event) => setPlatform(event.target.value as Platform)}>{Object.entries(PLATFORM_LABELS).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
+    <label>平台<select value={platform} onChange={(event) => setPlatform(event.target.value as Platform)}>{ACTIVE_PLATFORMS.map((value) => <option value={value} key={value}>{PLATFORM_LABELS[value]}</option>)}</select></label>
     <button className="workspace-primary" disabled={!query.trim() || importing} onClick={discover}>{importing ? '检索中…' : '发现并保存来源'}</button>
     <div className="workspace-divider">导入指定网页</div>
     <label>网页 URL<input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://..." /></label>
@@ -626,6 +624,41 @@ function TasksTab({ tasks, assets, onCompleted }: { tasks: AgentTask[]; assets: 
   const [assetId, setAssetId] = useState(''); const [objective, setObjective] = useState(''); const [running, setRunning] = useState(false);
   const run = async () => { if (!assetId || !objective.trim() || running) return; setRunning(true); try { await runAgentTask(objective.trim(), assetId); setObjective(''); await onCompleted(); } finally { setRunning(false); } };
   return <><div className="agent-runner"><div><span>Run an agent task</span><strong>让 Agent 读取事实、修改内容并重新质检</strong></div><select value={assetId} onChange={(event) => setAssetId(event.target.value)}><option value="">选择内容资产</option>{assets.map((asset) => <option value={asset.id} key={asset.id}>{asset.name}</option>)}</select><input value={objective} onChange={(event) => setObjective(event.target.value)} placeholder="例如：把这篇内容优化得更像真实买家分享，并修复所有质量问题" /><button disabled={!assetId || !objective.trim() || running} onClick={run}>{running ? '执行中…' : '执行任务'}</button></div><div className="task-grid">{tasks.length === 0 && <div className="workspace-empty">发起一次生成或执行任务后，这里会保留计划和结果。</div>}{tasks.map((task) => <article className="task-card" key={task.id}><span>{task.status === 'failed' ? 'Agent failed' : 'Agent plan'}</span><h3>{task.objective}</h3>{task.steps.map((step) => <div className={step.status} key={step.name}>{step.status === 'completed' ? '✓' : step.status === 'failed' ? '!' : '○'} {step.name}</div>)}{task.result_summary && <p>{task.result_summary}</p>}</article>)}</div></>;
+}
+
+export function PlatformConnectorPanel({ onSynced }: { onSynced: () => Promise<void> }) {
+  const { data: connectors = [], mutate } = useSWR('/shopgenie/api/platform-connectors', listPlatformConnectors);
+  const [syncing, setSyncing] = useState<string | null>(null);
+
+  const sync = async (connector: PlatformConnectorStatus) => {
+    setSyncing(connector.platform);
+    try {
+      const result = await syncPlatformConnector(connector.platform);
+      toast(`已从 ${PLATFORM_LABELS[connector.platform]} 同步 ${result.imported} 条效果数据`, 'success');
+      await Promise.all([mutate(), onSynced()]);
+    } catch (error) {
+      toast(error instanceof Error ? error.message : '平台数据同步失败');
+    } finally {
+      setSyncing(null);
+    }
+  };
+
+  return (
+    <div className="platform-connectors">
+      <div className="workspace-section-title">平台 API 只读连接器</div>
+      <p className="review-hint">只读取效果数据，不发布内容、不修改平台配置；令牌仅保存在后端环境变量。</p>
+      <div className="connector-list">
+        {connectors.map((connector) => (
+          <div className="connector-card" key={connector.platform}>
+            <div><strong>{PLATFORM_LABELS[connector.platform]}</strong><span>{connector.configured ? '已配置 · 只读' : '未配置'}</span></div>
+            <button className="workspace-secondary" disabled={!connector.configured || syncing === connector.platform} onClick={() => sync(connector)}>
+              {syncing === connector.platform ? '同步中…' : '立即同步'}
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function PerformanceTab({ assets, metrics, insights, onCreated, prefillParams }: {
@@ -682,6 +715,7 @@ function PerformanceTab({ assets, metrics, insights, onCreated, prefillParams }:
         <label>点击量<input type="number" min="0" value={clicks} onChange={(event) => setClicks(event.target.value)} /></label>
         <label>转化数<input type="number" min="0" value={conversions} onChange={(event) => setConversions(event.target.value)} /></label>
         <button className="workspace-primary" disabled={!assetId} onClick={create}>记录效果</button>
+        <PlatformConnectorPanel onSynced={onCreated} />
         <PerformanceCsvImport assets={assets} onImported={onCreated} />
       </div>
     </div>
@@ -690,25 +724,19 @@ function PerformanceTab({ assets, metrics, insights, onCreated, prefillParams }:
 
 function CalendarTab({
   calendarData,
-  assets,
   onSaved,
   onSelectTab,
-  onClose,
   onCreateFromTopic,
   activeProductId,
-  products,
 }: {
   calendarData?: MarketingCalendarData;
-  assets: ContentAsset[];
   onSaved: () => Promise<void>;
   onSelectTab: (tab: WorkspaceTab, assetId: string | null) => void;
-  onClose: () => void;
   onCreateFromTopic: (platform: Platform, brief: string, productId: string | null) => void;
   activeProductId: string | null;
-  products: Product[];
 }) {
 
-  const events = calendarData?.events ?? [];
+  const events = useMemo(() => calendarData?.events ?? [], [calendarData?.events]);
   const scheduledAssets = calendarData?.scheduled_assets ?? [];
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
 

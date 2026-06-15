@@ -58,9 +58,8 @@
 | `web_search.py` | 有界发现最新规则、趋势与竞品公开网页来源 |
 | `operations.py` | 每日运营指挥台：确定性生成优先行动建议 |
 | `performance_import.py` | 效果数据 CSV 预览校验与原子批量导入 |
-| `studio.py` | 商品图工作室：三视图生成 / 调整外观 / 场景图生成 / 微调，通义万相 Wan2.7 异步 + URL 直传 |
-| `vision.py` | 多模态：Qwen-VL 图片理解 + 通义万相文生图 |
-| `design_image_prompts.py` | 生图场景模板库：18 个电商图 prompt，5 大类 |
+| `platform_connectors.py` | 配置驱动的只读平台 API 效果数据连接器 |
+| `studio.py` / `vision.py` / `design_image_prompts.py` | 暂缓的商品图实验代码；保留后端实现，不在当前产品入口和前端范围 |
 
 ### 前端 (`frontend/src/`)
 
@@ -76,7 +75,6 @@
 | `components/WelcomeScreen.tsx` | 平台选择页 |
 | `components/WorkspacePanel.tsx` | 内容工作台：商品库、版本编辑、知识、任务、效果数据 |
 | `components/PerformanceCsvImport.tsx` | 效果数据 CSV 预览校验与导入面板 |
-| `components/StudioView.tsx` | 商品图工作室：上传→抠图→选模板→换背景，全屏工具页 |
 | `lib/api.ts` | API 客户端：sendChat + AbortSignal |
 | `lib/platforms.ts` | 平台类型定义 |
 

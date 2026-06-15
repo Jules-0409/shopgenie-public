@@ -1,87 +1,52 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import useSWR from 'swr';
 import { swrKeys, swrFetcher } from '@/lib/swr-fetcher';
 import { useChatContext } from '@/context/ChatContext';
 import ChatBubble from '@/components/ChatBubble';
-import { AmazonMark, BrandMark, DyMark, XhsMark, IconComment, IconCamera } from '@/components/Icons';
+import { AmazonMark, BrandMark, DyMark, XhsMark, IconComment } from '@/components/Icons';
 import InputBar from '@/components/InputBar';
 import ProfilePanel from '@/components/ProfilePanel';
 import Sidebar, { type ConversationSummary } from '@/components/Sidebar';
 import WelcomeScreen from '@/components/WelcomeScreen';
-import WorkspacePanel, { type WorkspaceTab } from '@/components/WorkspacePanel';
-import StudioView from '@/components/StudioView';
+import type { WorkspaceTab } from '@/components/WorkspacePanel';
 import BatchView from '@/components/BatchView';
-import { PLATFORM_LABELS, type Platform } from '@/lib/platforms';
-import { getProfile, type Product, type UserProfile } from '@/lib/api';
-import { isProductContextLocked } from '@/hooks/useChat';
+import { PLATFORM_LABELS, type ActivePlatform, type Platform } from '@/lib/platforms';
+import { getProfile, type UserProfile } from '@/lib/api';
+import { workspaceHref } from '@/lib/workspace-routes';
 
-const starterText: Record<Platform, string> = {
+const starterText: Record<ActivePlatform, string> = {
   xhs: '我想写一篇小红书种草笔记，产品是：',
   dy: '我想写一个抖音短视频脚本，产品是：',
   amazon: 'I want to create an Amazon listing. Product facts: ',
   cs: '我需要客服话术，商品是：',
-  studio: '',
 };
 
 function Home() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const chat = useChatContext();
 
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [draft, setDraft] = useState('');
-  const [view, setView] = useState<'chat' | 'welcome' | 'studio' | 'batch'>('chat');
+  const [view, setView] = useState<'chat' | 'welcome' | 'batch'>('chat');
   const [profileOpen, setProfileOpen] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   
   // Use SWR cache instead of local states
   const { data: products = [] } = useSWR(swrKeys.products, swrFetcher.products);
   
-  const [workspaceOpen, setWorkspaceOpen] = useState(false);
-  const [workspaceAssetId, setWorkspaceAssetId] = useState<string | null>(null);
-  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab | undefined>(undefined);
   const [pendingPlatform, setPendingPlatform] = useState<Platform | null>(null);
-  const [workspacePrefill, setWorkspacePrefill] = useState<{
-    product_id?: string | null;
-    asset_id?: string | null;
-    platform?: Platform | null;
-    brief?: string | null;
-  } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // 把工作台参数反映到地址栏 —— 只用 history.replaceState，不走 router。
-  // 静态导出 + basePath 下 router.replace 会触发整页硬跳转到 /shopgenie（无尾斜杠），
-  // 命中 nginx 的 location / 而跳回个人站；history.replaceState 只改地址栏、不导航，彻底规避。
-  const reflectUrl = (params: Record<string, string | null>) => {
-    const next = new URLSearchParams(window.location.search);
-    Object.entries(params).forEach(([key, val]) => {
-      if (val === null) next.delete(key); else next.set(key, val);
-    });
-    const query = next.toString();
-    window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
-  };
-
   const openWorkspace = (tab: WorkspaceTab, params: { product_id?: string | null; asset_id?: string | null; platform?: Platform | null; brief?: string | null } = {}) => {
-    setWorkspaceTab(tab);
-    setWorkspaceAssetId(params.asset_id ?? null);
-    if (params.product_id) chat.setActiveProduct(params.product_id);
-    setWorkspacePrefill({ product_id: params.product_id ?? null, asset_id: params.asset_id ?? null, platform: params.platform ?? null, brief: params.brief ?? null });
-    setWorkspaceOpen(true);
-    reflectUrl({ workspace: tab, asset_id: params.asset_id ?? null, product_id: params.product_id ?? null });
-  };
-
-  const closeWorkspace = () => {
-    setWorkspaceOpen(false);
-    setWorkspacePrefill(null);
-    setWorkspaceAssetId(null);
-    reflectUrl({ workspace: null, asset_id: null, product_id: null, platform: null, brief: null, action: null });
+    router.push(workspaceHref(tab, params));
   };
 
   // 营销日历「去创作」：直接进聊天并预填选题，不再绕 URL round-trip
   const createFromTopic = (plat: Platform, brief: string, productId: string | null) => {
-    closeWorkspace();
     if (productId) chat.setActiveProduct(productId);
     const prodName = products.find((p) => p.id === productId)?.name ?? '';
     const promptText =
@@ -95,14 +60,13 @@ function Home() {
     setView('chat');
   };
 
-  // 仅在首次挂载时读一次 URL，支持深链进入工作台（分享链接）
+  // 一级路由返回聊天后可携带创作预填参数。
   useEffect(() => {
-    const ws = searchParams.get('workspace') as WorkspaceTab | null;
-    if (!ws) return;
-    Promise.resolve().then(() => openWorkspace(ws, {
-      asset_id: searchParams.get('asset_id'),
-      product_id: searchParams.get('product_id'),
-    }));
+    const platform = searchParams.get('platform') as Platform | null;
+    const brief = searchParams.get('brief');
+    const productId = searchParams.get('product_id');
+    if (!platform || !brief) return;
+    Promise.resolve().then(() => createFromTopic(platform, brief, productId));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -132,8 +96,7 @@ function Home() {
     chat.setActiveId(id);
     setDraft('');
     setPendingPlatform(null);
-    const target = chat.conversations.find((c) => c.id === id);
-    setView(target?.platform === 'studio' ? 'studio' : 'chat');
+    setView('chat');
   };
 
   const newChat = () => {
@@ -143,12 +106,7 @@ function Home() {
     setView('welcome');
   };
 
-  const startFromPlatform = (actionPlatform: Platform, _title: string) => {
-    if (actionPlatform === 'studio') {
-      chat.setActiveId(null);
-      setView('studio');
-      return;
-    }
+  const startFromPlatform = (actionPlatform: ActivePlatform) => {
     setPendingPlatform(actionPlatform);
     setDraft(starterText[actionPlatform]);
     chat.setActiveId(null);
@@ -172,7 +130,6 @@ function Home() {
     if (p === 'dy') return <DyMark />;
     if (p === 'amazon') return <AmazonMark />;
     if (p === 'cs') return <IconComment />;
-    if (p === 'studio') return <IconCamera />;
     return null;
   };
 
@@ -180,20 +137,7 @@ function Home() {
     <div className="app-shell">
       <Sidebar activeId={chat.activeId} conversations={summaries} mobileOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} onNew={newChat} onSelect={openChat} onDelete={chat.deleteConversation} onProfileOpen={() => setProfileOpen(true)} onWorkspaceOpen={() => openWorkspace('products')} profile={profile} />
       <main className="main-shell">
-        {/* ── Studio View ── */}
-        {view === 'studio' ? (
-          <>
-            <header className="topbar">
-              <div className="topbar-inner">
-                <button aria-label="打开导航" className="icon-button mobile-menu" onClick={() => setMobileNavOpen(true)}><BrandMark s={18} /></button>
-                <span className="platform-pill studio">{platformIcon('studio')}商品图工作室</span>
-                <span className="topbar-title">{chat.activeConversation?.platform === 'studio' ? chat.activeConversation.title : '新建商品图'}</span>
-                <button className="icon-button" style={{ marginLeft: 'auto', fontSize: 13, width: 'auto', padding: '0 10px' }} onClick={newChat}>← 返回</button>
-              </div>
-            </header>
-            <StudioView chat={chat} />
-          </>
-        ) : view === 'batch' ? (
+        {view === 'batch' ? (
           <>
             <header className="topbar">
               <div className="topbar-inner">
@@ -271,9 +215,6 @@ function Home() {
         )}
       </main>
       <ProfilePanel open={profileOpen} onClose={() => setProfileOpen(false)} onSaved={setProfile} />
-      <WorkspacePanel open={workspaceOpen} initialTab={workspaceTab} onClose={closeWorkspace} onCreateFromTopic={createFromTopic} activeProductId={chat.activeProductId} productContextLocked={isProductContextLocked(chat.activeConversation)} onActiveProductChange={(productId) => {
-        chat.setActiveProduct(productId);
-      }} targetAssetId={workspaceAssetId} prefillParams={workspacePrefill} />
     </div>
   );
 }

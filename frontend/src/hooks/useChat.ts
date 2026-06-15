@@ -15,16 +15,6 @@ export interface Conversation {
   messages: Message[];
   productId?: string | null;
   productBindingConfirmed?: boolean;
-  studio?: {
-    phase: 'define' | 'scene';
-    ref: string | null;
-    adjHistory: string[];
-    results: Array<{ url: string; tweaking: boolean }>;
-    tmplCat: string;
-    prompt: string;
-    desc: string;
-    pendingTask?: { tid: string; kind: 'gen' | 'adjust' | 'scene'; adj?: string } | null;
-  };
 }
 
 export const isProductContextLocked = (conversation: Conversation | null) =>
@@ -79,7 +69,7 @@ export function useChat(defaultProductId: string | null) {
   // 已有会话只认自己绑定的商品；仅"新会话预览"才回退到默认商品，避免未绑定会话串用全局默认商品
   const activeProductId = activeConversation ? activeConversation.productId ?? null : defaultProductId;
 
-  // 修复历史脏数据：同一会话内重复的消息 ID（旧版 Studio ID bug 留下的）
+  // 修复历史脏数据：同一会话内重复的消息 ID
   const repairMessageIds = (msgs: Message[]): Message[] => {
     const seen = new Set<string>();
     return msgs.map((m) => {
@@ -90,10 +80,6 @@ export function useChat(defaultProductId: string | null) {
     });
   };
 
-  // 刷新时把残留的"微调中"标记复位（任务已无人轮询）
-  const repairStudio = (s?: Conversation['studio']): Conversation['studio'] =>
-    s ? { ...s, results: (s.results ?? []).map(r => ({ ...r, tweaking: false })) } : s;
-
   const hydrate = useCallback(async () => {
     // Try loading from backend first
     try {
@@ -102,6 +88,7 @@ export function useChat(defaultProductId: string | null) {
         const seen = new Set<string>();
         const restored: Conversation[] = [];
         for (const s of stored) {
+          if (s.platform === 'studio') continue;
           if (seen.has(s.id)) continue;
           seen.add(s.id);
           restored.push({
@@ -109,7 +96,6 @@ export function useChat(defaultProductId: string | null) {
             productId: s.product_binding_confirmed ? s.product_id : null,
             productBindingConfirmed: s.product_binding_confirmed,
             messages: repairMessageIds(s.messages as unknown as Message[]),
-            studio: repairStudio(s.studio as Conversation['studio']),
           });
         }
         // sort by updated_at desc (most recent first)
@@ -140,13 +126,13 @@ export function useChat(defaultProductId: string | null) {
         if (Array.isArray(saved) && saved.length > 0) {
           const seen = new Set<string>();
           const deduped = saved
+            .filter(c => c.platform !== 'studio')
             .filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true; })
             .map(c => ({
               ...c,
               productId: c.productBindingConfirmed ? c.productId : null,
               productBindingConfirmed: Boolean(c.productBindingConfirmed),
               messages: repairMessageIds(c.messages),
-              studio: repairStudio(c.studio),
             }));
           setConversations([...deduped, DEMO_CONVERSATION]);
           setActiveId(deduped[0].id);
@@ -182,7 +168,6 @@ export function useChat(defaultProductId: string | null) {
           product_id: conv.productId ?? null,
           product_binding_confirmed: Boolean(conv.productBindingConfirmed && conv.productId),
           messages: conv.messages as unknown as Record<string, unknown>[],
-          studio: conv.studio as Record<string, unknown> | undefined,
         }).then(() => lastPersistedRef.current.set(conv.id, conv)).catch(() => { /* ignore */ });
       }
     }, 1500);

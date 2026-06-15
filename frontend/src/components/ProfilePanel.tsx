@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { EMPTY_PROFILE, getProfile, saveProfile, type UserProfile } from '@/lib/api';
-import { PLATFORM_LABELS, type Platform } from '@/lib/platforms';
+import { ACTIVE_PLATFORMS, PLATFORM_LABELS, isActivePlatform, type Platform } from '@/lib/platforms';
 import { useEscClose } from '@/hooks/useEscClose';
 
 interface ProfilePanelProps {
@@ -11,7 +11,7 @@ interface ProfilePanelProps {
   onSaved: (profile: UserProfile) => void;
 }
 
-const PLATFORM_OPTIONS = Object.entries(PLATFORM_LABELS) as [Platform, string][];
+const PLATFORM_OPTIONS = ACTIVE_PLATFORMS.map((platform) => [platform, PLATFORM_LABELS[platform]] as const);
 const splitItems = (value: string) => value.split(/[、,，]/).map((item) => item.trim()).filter(Boolean);
 
 export default function ProfilePanel({ open, onClose, onSaved }: ProfilePanelProps) {
@@ -28,7 +28,7 @@ export default function ProfilePanel({ open, onClose, onSaved }: ProfilePanelPro
     getProfile()
       .then((data) => {
         const loaded = data ?? EMPTY_PROFILE;
-        setProfile(loaded);
+        setProfile({ ...loaded, platforms: loaded.platforms.filter(isActivePlatform) });
         setStyleText(loaded.style_preferences.join('、'));
         setTabooText(loaded.taboo_words.join('、'));
         setError('');

@@ -112,6 +112,32 @@ const DouyinPreview = ({ card, brandName, image, dragOver, onDragOver, onDragLea
   </div>
 );
 
+const DouyinProductCopyPreview = ({ card }: { card: GeneratedContent }) => (
+  <div className="douyin-copy-preview">
+    <div className="douyin-copy-head">
+      <span>抖音小店商品文案</span>
+      <b>可直接复制上架</b>
+    </div>
+    <section>
+      <small>商品标题</small>
+      <h2>{renderPlaceholder(card.title)}</h2>
+    </section>
+    <section>
+      <small>商品详情</small>
+      <p>{renderPlaceholder(card.body)}</p>
+    </section>
+    <div className="douyin-copy-sections">
+      {card.sections.map((section) => (
+        <section key={section.label}>
+          <small>{section.label}</small>
+          <p>{renderPlaceholder(section.content)}</p>
+        </section>
+      ))}
+    </div>
+    {card.tags.length > 0 && <div className="post-tags">{card.tags.map((tag) => <span className="post-tag" key={tag}>#{tag}</span>)}</div>}
+  </div>
+);
+
 const AmazonPreview = ({ card, image, dragOver, onDragOver, onDragLeave, onDrop }: {
   card: GeneratedContent;
   image: string | null; dragOver: boolean;
@@ -403,7 +429,10 @@ export default function ResultCard({ card, brandName = '你的品牌', onRegener
   const [copied, setCopied] = useState(false);
   const { image, dragOver, onDragOver, onDragLeave, onDrop } = useDropImage();
   const copy = async () => {
-    await navigator.clipboard.writeText(`${card.title}\n\n${card.body}\n\n${card.tags.map((tag) => `#${tag}`).join(' ')}`);
+    const sections = card.sections.map((section) => `${section.label}\n${section.content}`).join('\n\n');
+    await navigator.clipboard.writeText(
+      [card.title, card.body, sections, card.tags.map((tag) => `#${tag}`).join(' ')].filter(Boolean).join('\n\n'),
+    );
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1800);
   };
@@ -420,7 +449,9 @@ export default function ResultCard({ card, brandName = '你的品牌', onRegener
       </header>
       <div className={`result-stage stage-${card.platform}`}>
         {card.platform === 'xhs' && <XhsPreview card={card} brandName={brandName} image={image} dragOver={dragOver} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} />}
-        {card.platform === 'dy' && <DouyinPreview card={card} brandName={brandName} image={image} dragOver={dragOver} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} />}
+        {card.platform === 'dy' && card.content_type === 'douyin_product_copy'
+          ? <DouyinProductCopyPreview card={card} />
+          : card.platform === 'dy' && <DouyinPreview card={card} brandName={brandName} image={image} dragOver={dragOver} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} />}
         {card.platform === 'amazon' && <AmazonPreview card={card} image={image} dragOver={dragOver} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} />}
         {card.platform === 'cs' && <CSPreview card={card} onTweakVariant={onTweakVariant} />}
       </div>

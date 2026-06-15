@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_timeout_seconds: float = Field(default=30, gt=0, le=120)
     dashscope_api_key: str = Field(default="")
+    platform_api_connectors_json: str = Field(default="{}")
 
 
 @lru_cache

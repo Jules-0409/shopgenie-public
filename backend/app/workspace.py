@@ -9,7 +9,7 @@ from pathlib import Path
 
 from app import memory
 from app.postprocess import post_process
-from app.schemas import GeneratedContent, Platform
+from app.schemas import ContentType, GeneratedContent, Platform
 
 MIN_EXPERIMENT_IMPRESSIONS_PER_VARIANT = 300
 
@@ -239,7 +239,10 @@ def evaluate_quality(content: GeneratedContent, product: Product | None = None, 
         unknown_claims = [claim for claim in claims if claim.lower().replace(" ", "") not in known_text.replace(" ", "")]
         add("事实一致性", not unknown_claims, "未发现未经确认的规格数字" if not unknown_claims else f"待核对：{'、'.join(unknown_claims)}", "移除或确认未经商品事实库支持的规格数字")
     if content.platform == Platform.DOUYIN:
-        add("抖音分镜", len(content.sections) >= 3, f"{len(content.sections)} 个分镜", "至少补足 3 个分镜")
+        if content.content_type == ContentType.DOUYIN_PRODUCT_COPY:
+            add("抖音商品详情", len(content.body.strip()) >= 30 and len(content.sections) >= 2, f"{len(content.sections)} 个详情段落", "补充核心卖点与商品详情")
+        else:
+            add("抖音分镜", len(content.sections) >= 3, f"{len(content.sections)} 个分镜", "至少补足 3 个分镜")
     elif content.platform == Platform.AMAZON:
         add("Amazon Bullet", len(content.sections) >= 3, f"{len(content.sections)} 条内容段落", "至少补足 3 条 Bullet Points")
     else:

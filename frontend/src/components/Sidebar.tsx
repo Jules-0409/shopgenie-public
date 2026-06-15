@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { BrandMark, IconPlus } from './Icons';
 import type { Platform } from '@/lib/platforms';
-import { PLATFORM_LABELS } from '@/lib/platforms';
+import { PLATFORM_LABELS, isActivePlatform } from '@/lib/platforms';
 import type { UserProfile } from '@/lib/api';
 
 export interface ConversationSummary {
@@ -51,7 +51,7 @@ export default function Sidebar({ activeId, conversations, mobileOpen, onClose, 
   };
 
   const profileTags = profile
-    ? [profile.tone, ...profile.style_preferences, ...profile.platforms.map((item) => PLATFORM_LABELS[item])].filter(Boolean).slice(0, 5)
+    ? [profile.tone, ...profile.style_preferences, ...profile.platforms.filter(isActivePlatform).map((item) => PLATFORM_LABELS[item])].filter(Boolean).slice(0, 5)
     : [];
   const profileName = profile?.brand_name || '设置品牌档案';
   const profileSub = profile?.category ? `${profile.category} · 品牌档案` : '添加资料，让生成更懂你';

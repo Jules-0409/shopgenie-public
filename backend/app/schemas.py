@@ -12,6 +12,12 @@ class Platform(StrEnum):
     STUDIO = "studio"
 
 
+class ContentType(StrEnum):
+    STANDARD = "standard"
+    DOUYIN_SCRIPT = "douyin_script"
+    DOUYIN_PRODUCT_COPY = "douyin_product_copy"
+
+
 class ChatMessage(BaseModel):
     role: str = Field(pattern="^(user|assistant)$")
     content: str = Field(min_length=1, max_length=4000)
@@ -38,6 +44,7 @@ class ContentSection(BaseModel):
 
 class GeneratedContent(BaseModel):
     platform: Platform
+    content_type: ContentType = ContentType.STANDARD
     title: str = Field(min_length=1, max_length=300)
     body: str = Field(max_length=8000)
     tags: list[str] = Field(default_factory=list, max_length=20)
@@ -61,4 +68,3 @@ class ChatResponse(BaseModel):
 class ActionStateRequest(BaseModel):
     state: str = Field(pattern="^(open|done|dismissed)$")
     metric_snapshot: str = Field(default="", max_length=500)
-

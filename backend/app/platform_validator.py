@@ -2,7 +2,7 @@
 import re
 from dataclasses import dataclass, field
 
-from app.schemas import GeneratedContent, Platform
+from app.schemas import ChatRequest, ContentType, GeneratedContent, Platform
 
 
 @dataclass
@@ -40,6 +40,43 @@ def _has_time_markers(text: str) -> bool:
     return bool(re.search(r'\d+\s*[-–—]\s*\d+\s*[s秒]', text))
 
 
+def build_cross_platform_choice(request: ChatRequest) -> tuple[str, list[dict[str, list[str] | str]]] | None:
+    """Intercept explicit requests to generate for a platform other than the session platform."""
+    text = request.message.lower()
+    generation_terms = ("生成", "写一", "写个", "做一", "做个", "改成", "转换成", "脚本", "文案", "listing")
+    if not any(term in text for term in generation_terms):
+        return None
+    platform_terms = {
+        Platform.XHS: ("小红书", "xiaohongshu"),
+        Platform.DOUYIN: ("抖音", "douyin"),
+        Platform.AMAZON: ("amazon", "亚马逊"),
+        Platform.CS: ("客服话术", "客服模板"),
+    }
+    current_terms = platform_terms[request.platform]
+    if any(term in text for term in current_terms):
+        return None
+    target = next(
+        (platform for platform, terms in platform_terms.items() if platform != request.platform and any(term in text for term in terms)),
+        None,
+    )
+    if target is None:
+        return None
+    labels = {
+        Platform.XHS: "小红书",
+        Platform.DOUYIN: "抖音",
+        Platform.AMAZON: "Amazon",
+        Platform.CS: "客服话术",
+    }
+    current_label = labels[request.platform]
+    target_label = labels[target]
+    message = f"当前是{current_label}会话，不能静默生成{target_label}格式。请选择如何继续："
+    questions = [{
+        "question": "如何处理这次跨平台需求？",
+        "options": [f"转换为{current_label}内容", f"新建{target_label}会话后生成"],
+    }]
+    return message, questions
+
+
 def validate_xhs(content: GeneratedContent) -> ValidationResult:
     """Validate Xiaohongshu content structure."""
     result = ValidationResult()
@@ -56,6 +93,11 @@ def validate_xhs(content: GeneratedContent) -> ValidationResult:
         result.errors.append("小红书笔记至少需要 1 个标签")
         result.valid = False
 
+    full_text = f"{content.title}\n{content.body}\n" + "\n".join(f"{s.label}\n{s.content}" for s in content.sections)
+    if _has_time_markers(full_text):
+        result.errors.append("小红书笔记不得包含分秒脚本结构")
+        result.valid = False
+
     # Check for Amazon-style content pollution
     if _is_primarily_english(content.body):
         result.errors.append("检测到英文内容，疑似 Amazon 格式污染")
@@ -65,7 +107,7 @@ def validate_xhs(content: GeneratedContent) -> ValidationResult:
 
 
 def validate_douyin(content: GeneratedContent) -> ValidationResult:
-    """Validate Douyin script structure."""
+    """Validate Douyin script or product-copy structure."""
     result = ValidationResult()
 
     if not _is_primarily_chinese(content.title):
@@ -76,16 +118,39 @@ def validate_douyin(content: GeneratedContent) -> ValidationResult:
         result.errors.append("抖音脚本正文必须是中文")
         result.valid = False
 
-    # Check for time markers in sections or body
-    has_markers = _has_time_markers(content.body)
-    if not has_markers:
-        for section in content.sections:
-            if _has_time_markers(section.content) or _has_time_markers(section.label):
-                has_markers = True
-                break
+    if content.content_type == ContentType.DOUYIN_PRODUCT_COPY:
+        full_text = f"{content.title}\n{content.body}\n" + "\n".join(f"{s.label}\n{s.content}" for s in content.sections)
+        if _has_time_markers(full_text):
+            result.errors.append("抖音商品文案不得包含时间分镜结构")
+            result.valid = False
+        if len(content.body.strip()) < 30:
+            result.errors.append("抖音商品文案需要完整商品详情")
+            result.valid = False
+        if len(content.sections) < 2:
+            result.errors.append("抖音商品文案至少需要核心卖点和商品详情两个段落")
+            result.valid = False
+        return result
 
-    if not has_markers and len(content.sections) < 2:
-        result.errors.append("抖音脚本需要包含时间分镜结构（如 0-3s、3-12s）或至少 2 个分镜段落")
+    if len(content.sections) < 3:
+        result.errors.append("抖音脚本至少需要 3 个分镜")
+        result.valid = False
+        return result
+
+    for index, section in enumerate(content.sections, start=1):
+        combined = f"{section.label} {section.content}"
+        if not _has_time_markers(combined):
+            result.errors.append(f"抖音脚本第 {index} 个分镜缺少明确时间段")
+        if not re.search(r"镜头|画面|特写|展示|拍摄|场景", combined):
+            result.errors.append(f"抖音脚本第 {index} 个分镜缺少画面/镜头说明")
+        if not re.search(r"口播|台词|旁白|说[:：]|主播", combined):
+            result.errors.append(f"抖音脚本第 {index} 个分镜缺少口播")
+    first = f"{content.sections[0].label} {content.sections[0].content}"
+    last = f"{content.sections[-1].label} {content.sections[-1].content}"
+    if not re.search(r"hook|钩子|开头|留人|冲突|好奇", first, re.IGNORECASE):
+        result.errors.append("抖音脚本开头缺少 Hook")
+    if not re.search(r"转化|引导|下单|链接|购物车|行动", last):
+        result.errors.append("抖音脚本结尾缺少转化动作")
+    if result.errors:
         result.valid = False
 
     return result
@@ -103,9 +168,14 @@ def validate_amazon(content: GeneratedContent) -> ValidationResult:
         result.errors.append("Amazon 正文必须是英文")
         result.valid = False
 
-    if len(content.sections) < 2:
-        result.errors.append("Amazon Listing 至少需要 2 条 Bullet Points")
+    if not 3 <= len(content.sections) <= 5:
+        result.errors.append("Amazon Listing 需要 3-5 条 Bullet Points")
         result.valid = False
+    for section in content.sections:
+        if not _is_primarily_english(f"{section.label} {section.content}"):
+            result.errors.append("Amazon Bullet Points 必须使用英文")
+            result.valid = False
+            break
 
     return result
 

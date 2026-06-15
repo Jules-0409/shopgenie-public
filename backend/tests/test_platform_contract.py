@@ -10,6 +10,7 @@ from app.config import Settings, get_settings
 from app.deepseek import DeepSeekClient
 from app.main import app
 from app.schemas import ChatRequest, Platform
+from app.stream import chat_stream_generator
 
 
 def settings() -> Settings:
@@ -30,6 +31,18 @@ VALID_XHS = json.dumps({
     "title": "每天两粒，嗓子真的舒服了",
     "body": "最近换季嗓子干痒，闺蜜推荐了这款维生素软糖，酸酸甜甜像吃糖一样，坚持两周明显感觉状态好了很多。成分表很干净，无蔗糖配方也不怕胖。",
     "tags": ["维生素软糖", "换季养生"],
+}, ensure_ascii=False)
+
+VALID_DOUYIN_PRODUCT_COPY = json.dumps({
+    "kind": "result",
+    "message": "已生成商品文案",
+    "content_type": "douyin_product_copy",
+    "title": "轻量便携保温杯 通勤随行杯",
+    "body": "适合通勤、办公和日常出行使用，杯身轻巧便携，商品信息清晰，可直接用于抖音小店详情页。",
+    "sections": [
+        {"label": "核心卖点", "content": "轻量杯身，随手放进通勤包。"},
+        {"label": "适用场景", "content": "适合办公桌、通勤和日常外出。"}
+    ],
 }, ensure_ascii=False)
 
 
@@ -82,3 +95,30 @@ def test_chat_rejects_studio_platform() -> None:
         app.dependency_overrides.clear()
     assert r1.status_code == 422
     assert r2.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_douyin_product_copy_uses_its_own_contract() -> None:
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(200, json={"choices": [{"message": {"content": VALID_DOUYIN_PRODUCT_COPY}}]})
+    )
+    async with httpx.AsyncClient(transport=transport, base_url="https://api.deepseek.com") as client:
+        response = await DeepSeekClient(settings(), client).chat(
+            ChatRequest(platform=Platform.DOUYIN, message="生成抖音小店商品文案")
+        )
+
+    assert response.result is not None
+    assert response.result.content_type.value == "douyin_product_copy"
+
+
+@pytest.mark.asyncio
+async def test_stream_cross_platform_request_returns_choice_without_model() -> None:
+    events = [
+        event async for event in chat_stream_generator(
+            ChatRequest(platform=Platform.XHS, message="帮我生成一个抖音脚本"),
+            settings(),
+        )
+    ]
+
+    assert any("新建抖音会话后生成" in event for event in events)
+    assert any("event: done" in event for event in events)

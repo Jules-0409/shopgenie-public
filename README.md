@@ -24,11 +24,11 @@ flowchart LR
 | 模块 | 说明 |
 |------|------|
 | **每日运营指挥台** | 打开首页直接看到今天最值得做的 3-5 件事：按资产聚合诊断、平台差异化 CTR 基准、近 7 天 vs 前 7 天趋势告警、按曝光影响排序；建议可忽略/完成，有新数据自动复活；每条建议带预填上下文直达对应工具 |
+| **平台 API 只读同步** | 后端预配置只读连接器，显式同步真实效果数据；全量校验、幂等写入，不执行平台写操作 |
 | **评论反哺** | 粘贴买家评价 → 提炼高频卖点/痛点/踩雷词/原声金句 → 自动注入该商品所有后续生成，把"模型臆想卖点"换成"买家真实在乎的点" |
 | **多平台生成** | 小红书种草笔记、抖音短视频脚本、Amazon Listing、客服话术；各平台独立结构契约 + SSE 流式输出 + 一键全平台批量 |
 | **A/B 实验** | 一键生成多策略标题/钩子变体 → 真实投放回填数据 → 达到最小样本量才判定赢家 → 赢家风格反哺后续生成 |
 | **质量保障** | 违禁词检测、平台结构强校验（校验失败不出成品，最多自动矫正一次）、质量评分、词级版本 diff |
-| **商品图工作室** | 三视图生成 → 外观调整 → 一键换场景（通义万相） |
 | **营销日历** | 节点提醒 + 按品类的应景选题，一键带选题进入创作 |
 
 ## 设计决策（为什么这么做）
@@ -40,13 +40,13 @@ flowchart LR
 
 ## 工程质量
 
-- **142 个自动化测试**（后端 pytest 111 + 前端 vitest 31），覆盖平台契约、商品上下文、指挥台规则、A/B 判胜、CSV 原子导入
+- **164 个自动化测试**（后端 pytest 124 + 前端 vitest 40），覆盖平台契约、商品上下文、指挥台规则、A/B 判胜、CSV 原子导入与平台 API 连接器
 - **多 agent 协作开发流程**：由多个 AI coding agent 并行实现，人工负责 PRD、架构决策与代码评审（评审记录见 git history——包括拦下数据污染接口与安全缺陷的真实案例）
 - [PRD.md](PRD.md)（产品定义 + 演进路线）与 [PROGRESS.md](PROGRESS.md)（如实标注未完成项的进度日志）全程维护
 
 ## 技术栈
 
-**后端** Python 3.11 / FastAPI / SQLite / SSE　**前端** Next.js 16 / React 19 / TypeScript / SWR / Tailwind　**LLM** DeepSeek（OpenAI 兼容）+ 通义万相（图像）
+**后端** Python 3.11 / FastAPI / SQLite / SSE　**前端** Next.js 16 / React 19 / TypeScript / SWR / CSS　**LLM** DeepSeek（OpenAI 兼容）
 
 ## 快速开始
 
@@ -75,16 +75,17 @@ backend/app/
 ├── review_mining.py         # 评论反哺：买家评价 → 结构化洞察
 ├── ab_testing.py            # A/B 变体生成 + 最小样本量判胜
 ├── performance_import.py    # CSV 预览校验 + 原子批量导入
+├── platform_connectors.py   # 只读平台 API 效果数据同步
 ├── marketing.py             # 营销节点日历
 ├── platform_validator.py    # 平台结构强校验
 ├── postprocess.py           # 违禁词 + 平台规则检查
 ├── workspace.py             # 商品/内容/版本/效果/实验存储
 ├── deepseek.py / stream.py  # LLM 客户端 + SSE 流式
-└── vision.py                # 商品图生成（通义万相）
+└── studio.py / vision.py    # 暂缓的商品图实验代码，不在当前产品入口
 
 frontend/src/
 ├── app/page.tsx             # 单页应用入口 + 深链路由
-├── components/              # 指挥台/工作台/聊天/批量/Studio
+├── components/              # 指挥台/工作台/聊天/批量
 ├── hooks/useChat.ts         # 会话状态 + 流式消费 + 持久化
 └── lib/                     # API 客户端 / SWR 数据层
 ```

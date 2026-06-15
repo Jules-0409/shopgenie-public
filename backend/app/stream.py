@@ -11,6 +11,7 @@ from app.deepseek import DeepSeekClient, DeepSeekError
 from app.memory import get_profile
 from app.postprocess import post_process
 from app.schemas import ChatRequest, Platform
+from app.platform_validator import build_cross_platform_choice
 from app.workspace import get_product
 from app.workspace_context import learn_product_from_message
 
@@ -31,6 +32,23 @@ async def chat_stream_generator(
     from starlette.concurrency import run_in_threadpool
 
     try:
+        cross_platform_choice = build_cross_platform_choice(request)
+        if cross_platform_choice:
+            message, questions = cross_platform_choice
+            response_data = {
+                "message": message,
+                "result": None,
+                "questions": questions,
+                "warnings": None,
+                "conversation_title": None,
+                "asset_id": None,
+                "quality": None,
+                "task_id": None,
+                "sources": [],
+            }
+            yield sse_event("result", response_data)
+            yield sse_event("done", {"status": "ok"})
+            return
         # Step 1: Loading context
         yield sse_event("status", {"step": "loading", "message": "正在加载上下文..."})
 

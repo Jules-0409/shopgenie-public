@@ -71,7 +71,7 @@ export default function BatchView({ profile }: { profile: UserProfile | null }) 
 
         {loading && (
           <div className="batch-loading">
-            {selected.map((p) => <div className="batch-skeleton" key={p}><span className="batch-skeleton-tag">{PLATFORM_LABELS[p]}</span><span className="studio-task-spinner" /></div>)}
+            {selected.map((p) => <div className="batch-skeleton" key={p}><span className="batch-skeleton-tag">{PLATFORM_LABELS[p]}</span><span className="batch-task-spinner" /></div>)}
           </div>
         )}
 

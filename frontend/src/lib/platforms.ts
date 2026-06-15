@@ -1,4 +1,5 @@
 export type Platform = 'xhs' | 'dy' | 'amazon' | 'cs' | 'studio';
+export type ActivePlatform = Exclude<Platform, 'studio'>;
 
 export const PLATFORM_LABELS: Record<Platform, string> = {
   xhs: '小红书',
@@ -16,5 +17,9 @@ export const PLATFORM_TITLES: Record<Platform, string> = {
   studio: '商品图工作室',
 };
 
-export const CONTENT_PLATFORMS: Platform[] = ['xhs', 'dy', 'amazon'];
-export const SCENARIO_PLATFORMS: Platform[] = ['cs', 'studio'];
+export const ACTIVE_PLATFORMS: ActivePlatform[] = ['xhs', 'dy', 'amazon', 'cs'];
+export const CONTENT_PLATFORMS: ActivePlatform[] = ['xhs', 'dy', 'amazon'];
+export const SCENARIO_PLATFORMS: ActivePlatform[] = ['cs'];
+
+export const isActivePlatform = (platform: Platform): platform is ActivePlatform =>
+  platform !== 'studio';

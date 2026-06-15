@@ -26,7 +26,11 @@ async def test_chat_returns_content_and_usage() -> None:
                     "title": "15秒补水面膜脚本",
                     "body": "完整脚本正文",
                     "tags": ["补水"],
-                    "sections": [{"label": "0-3秒 Hook", "content": "开场口播"}],
+                    "sections": [
+                        {"label": "0-3秒 Hook", "content": "镜头：面膜特写。口播：干皮姐妹别划走。"},
+                        {"label": "3-10秒 展示", "content": "画面：展示质地。口播：看这个清爽质地。"},
+                        {"label": "10-15秒 转化", "content": "镜头：包装特写。口播：点击链接了解详情，引导行动。"},
+                    ],
                 }, ensure_ascii=False)}}],
                 "usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
             },
@@ -39,6 +43,24 @@ async def test_chat_returns_content_and_usage() -> None:
     assert result.result is not None
     assert result.result.sections[0].label == "0-3秒 Hook"
     assert result.usage.total_tokens == 30
+
+
+@pytest.mark.asyncio
+async def test_cross_platform_generation_request_does_not_call_model() -> None:
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        raise AssertionError("跨平台生成请求不应调用模型")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="https://api.deepseek.com") as client:
+        result = await DeepSeekClient(settings(), client).chat(
+            ChatRequest(platform=Platform.XHS, message="帮我生成一个抖音脚本")
+        )
+
+    assert calls["n"] == 0
+    assert result.result is None
+    assert result.questions
 
 
 @pytest.mark.asyncio

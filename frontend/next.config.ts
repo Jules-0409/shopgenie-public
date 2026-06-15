@@ -4,6 +4,7 @@ const isProd = process.env.NODE_ENV === "production";
 
 const nextConfig: NextConfig = {
   basePath: "/shopgenie",
+  trailingSlash: true,
   ...(isProd ? {
     output: "export" as const,
   } : {

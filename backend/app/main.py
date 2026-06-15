@@ -60,6 +60,7 @@ from app.review_mining import analyze_reviews
 from app.ab_testing import generate_variants
 from app.operations import build_operations_brief
 from app.performance_import import import_performance_csv, preview_performance_csv
+from app.platform_connectors import SUPPORTED_PLATFORMS, list_connector_status, sync_platform_performance
 from app.marketing import MARKETING_EVENTS, get_topics_for_event
 
 logging.basicConfig(
@@ -606,6 +607,24 @@ async def api_create_performance(req: PerformanceInput) -> PerformanceRecord:
     data = req.model_dump()
     data["platform"] = req.platform.value
     return await run_in_threadpool(save_performance, PerformanceRecord(**data))
+
+
+@app.get("/api/platform-connectors")
+async def api_list_platform_connectors(settings: Settings = Depends(get_settings)) -> list[dict[str, str | bool]]:
+    try:
+        return list_connector_status(settings)
+    except ValueError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/platform-connectors/{platform}/sync")
+async def api_sync_platform_connector(platform: Platform, settings: Settings = Depends(get_settings)) -> dict[str, object]:
+    if platform not in SUPPORTED_PLATFORMS:
+        raise HTTPException(status_code=422, detail=f"平台 {platform.value} 不支持效果数据连接器")
+    try:
+        return await sync_platform_performance(platform, settings)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 class PerformanceCsvInput(BaseModel):

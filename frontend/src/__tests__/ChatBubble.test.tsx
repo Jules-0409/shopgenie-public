@@ -8,6 +8,18 @@ const mockCard: GeneratedContent = {
   platform: 'xhs', title: '测试标题', body: '测试正文', tags: ['测试标签'], sections: [],
 };
 
+const douyinProductCopy: GeneratedContent = {
+  platform: 'dy',
+  content_type: 'douyin_product_copy',
+  title: '轻量便携保温杯',
+  body: '适合通勤、办公和日常出行使用，可直接用于抖音小店详情页。',
+  tags: ['通勤好物'],
+  sections: [
+    { label: '核心卖点', content: '轻量杯身，方便随身携带。' },
+    { label: '适用场景', content: '适合办公桌和日常出行。' },
+  ],
+};
+
 describe('ChatBubble', () => {
   it('renders user message', () => {
     render(<ChatBubble msg={{ id: '1', role: 'user', text: '用户消息' }} />);
@@ -37,6 +49,13 @@ describe('ChatBubble', () => {
   it('renders result card when card is present', () => {
     render(<ChatBubble msg={{ id: '6', role: 'ai', text: '生成完成', card: mockCard }} />);
     expect(screen.getByText('测试标题')).toBeInTheDocument();
+  });
+
+  it('renders douyin product copy with a product-detail preview instead of storyboards', () => {
+    render(<ChatBubble msg={{ id: 'copy', role: 'ai', text: '生成完成', card: douyinProductCopy }} />);
+    expect(screen.getByText('抖音小店商品文案')).toBeInTheDocument();
+    expect(screen.getByText('商品详情')).toBeInTheDocument();
+    expect(screen.queryByText('拍摄脚本')).not.toBeInTheDocument();
   });
 
   it('renders warnings when present', () => {

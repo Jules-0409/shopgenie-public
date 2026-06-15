@@ -2,9 +2,9 @@
 
 import useSWR from 'swr';
 import { swrKeys, swrFetcher } from '@/lib/swr-fetcher';
-import { AmazonMark, DyMark, XhsMark, IconComment, IconCamera, IconBox, IconFlask, IconChart } from './Icons';
+import { AmazonMark, DyMark, XhsMark, IconComment, IconBox, IconFlask, IconChart } from './Icons';
 import { updateOperationActionState, type OperationsAction, type UserProfile } from '@/lib/api';
-import { PLATFORM_LABELS, type Platform } from '@/lib/platforms';
+import { PLATFORM_LABELS, type ActivePlatform, type Platform } from '@/lib/platforms';
 import type { WorkspaceTab } from './WorkspacePanel';
 
 const PlatformIcon = ({ platform }: { platform: Platform }) => {
@@ -12,7 +12,6 @@ const PlatformIcon = ({ platform }: { platform: Platform }) => {
   if (platform === 'dy') return <DyMark s={16} />;
   if (platform === 'amazon') return <AmazonMark s={16} />;
   if (platform === 'cs') return <IconComment />;
-  if (platform === 'studio') return <IconCamera />;
   return null;
 };
 
@@ -122,7 +121,7 @@ const greeting = () => {
 };
 
 interface WelcomeScreenProps {
-  onSelect: (platform: Platform, title: string) => void;
+  onSelect: (platform: ActivePlatform, title: string) => void;
   profile: UserProfile | null;
   onProfileOpen?: () => void;
   onOpenWorkspace?: (tab: WorkspaceTab, params?: { product_id?: string | null; asset_id?: string | null; platform?: string | null; brief?: string | null }) => void;
@@ -172,13 +171,6 @@ export default function WelcomeScreen({ onSelect, profile, onOpenWorkspace, onBa
               <div className="creator-btn-copy">
                 <strong>客服话术</strong>
                 <span>多平台私信与回复模拟</span>
-              </div>
-            </button>
-            <button className="creator-btn studio" onClick={() => onSelect('studio', '商品图工作室')}>
-              <span className="creator-icon"><PlatformIcon platform="studio" /></span>
-              <div className="creator-btn-copy">
-                <strong>商品生图</strong>
-                <span>三视图定义 → 调整 → 场景图</span>
               </div>
             </button>
             {onBatch && (

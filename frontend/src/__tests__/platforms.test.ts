@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PLATFORM_LABELS, type Platform } from '@/lib/platforms';
+import { ACTIVE_PLATFORMS, PLATFORM_LABELS, isActivePlatform } from '@/lib/platforms';
 
 describe('platforms', () => {
   it('has labels for all three platforms', () => {
@@ -13,5 +13,11 @@ describe('platforms', () => {
       expect(typeof label).toBe('string');
       expect(label.length).toBeGreaterThan(0);
     }
+  });
+
+  it('keeps the paused studio platform out of user-facing choices', () => {
+    expect(ACTIVE_PLATFORMS).toEqual(['xhs', 'dy', 'amazon', 'cs']);
+    expect(ACTIVE_PLATFORMS).not.toContain('studio');
+    expect(isActivePlatform('studio')).toBe(false);
   });
 });

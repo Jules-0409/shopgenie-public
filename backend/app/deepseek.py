@@ -9,9 +9,9 @@ import httpx
 from app.config import Settings
 from app.memory import UserProfile, build_memory_prompt
 from app.postprocess import post_process
-from app.platform_validator import validate_platform_content
+from app.platform_validator import build_cross_platform_choice, validate_platform_content
 from app.prompts import build_system_prompt
-from app.schemas import ChatRequest, ChatResponse, ContentSection, GeneratedContent, Usage
+from app.schemas import ChatRequest, ChatResponse, ContentSection, ContentType, GeneratedContent, Platform, Usage
 from app.workspace import Product
 from app.workspace_context import build_knowledge_prompt, build_performance_prompt, build_product_prompt, build_content_history_prompt, build_experiment_prompt, retrieve_knowledge
 from app.competitive_analysis import search_competitors, build_competitive_context
@@ -42,6 +42,15 @@ class DeepSeekClient:
         self._product = product
 
     async def chat(self, request: ChatRequest) -> ChatResponse:
+        cross_platform_choice = build_cross_platform_choice(request)
+        if cross_platform_choice:
+            message, questions = cross_platform_choice
+            return ChatResponse(
+                message=message,
+                questions=questions,
+                model=self.settings.deepseek_model,
+                usage=Usage(),
+            )
         system_prompt = build_system_prompt(request.platform)
         memory_prompt = build_memory_prompt(self._profile)
         if memory_prompt:
@@ -203,6 +212,7 @@ class DeepSeekClient:
             try:
                 result = GeneratedContent(
                     platform=request.platform,
+                    content_type=self._content_type(parsed, request),
                     title=parsed["title"],
                     body=parsed["body"],
                     tags=parsed.get("tags", []),
@@ -223,6 +233,7 @@ class DeepSeekClient:
             try:
                 result = GeneratedContent(
                     platform=request.platform,
+                    content_type=self._content_type(parsed, request),
                     title=str(parsed["title"]),
                     body=str(parsed["body"]),
                     tags=[str(t) for t in (parsed.get("tags") or []) if t],
@@ -234,6 +245,21 @@ class DeepSeekClient:
                 logger.warning("未知 kind 拼装卡片失败: %s", exc)
         fallback_msg = str(parsed.get("message", "")).strip() or content[:2000]
         return fallback_msg, None
+
+    @staticmethod
+    def _content_type(parsed: dict[str, Any], request: ChatRequest) -> ContentType:
+        raw_type = parsed.get("content_type")
+        if raw_type:
+            try:
+                return ContentType(raw_type)
+            except ValueError:
+                logger.warning("DeepSeek 返回未知 content_type=%s，按请求推断", raw_type)
+        if request.platform == Platform.DOUYIN:
+            product_copy_terms = ("商品文案", "商品标题", "商品详情", "详情页", "抖音小店", "上架文案")
+            if any(term in request.message for term in product_copy_terms):
+                return ContentType.DOUYIN_PRODUCT_COPY
+            return ContentType.DOUYIN_SCRIPT
+        return ContentType.STANDARD
 
     @staticmethod
     def _try_parse_json(content: str) -> dict | None:

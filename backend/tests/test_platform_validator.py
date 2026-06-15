@@ -7,7 +7,8 @@ from app.platform_validator import (
     _is_primarily_english,
     _has_time_markers,
 )
-from app.schemas import ContentSection, GeneratedContent, Platform
+from app.schemas import ChatRequest, ContentSection, ContentType, GeneratedContent, Platform
+from app.platform_validator import build_cross_platform_choice
 
 
 def make_content(platform: Platform, title: str, body: str, tags=None, sections=None):
@@ -51,6 +52,13 @@ def test_xhs_rejects_amazon_pollution():
     assert not result.valid
 
 
+def test_xhs_rejects_timed_script_pollution():
+    content = make_content(Platform.XHS, "面膜分享", "0-3秒 镜头展示面膜，口播介绍卖点。", tags=["面膜"])
+    result = validate_xhs(content)
+    assert not result.valid
+    assert any("分秒脚本" in error for error in result.errors)
+
+
 # --- Douyin ---
 
 def test_douyin_valid_script():
@@ -58,9 +66,9 @@ def test_douyin_valid_script():
         Platform.DOUYIN, "30秒补水面膜脚本",
         "姐妹们我终于找到干皮的救星了！",
         sections=[
-            ContentSection(label="0-3s Hook", content="开场口播"),
-            ContentSection(label="3-12s 展示", content="产品展示"),
-            ContentSection(label="12-30s 转化", content="引导下单"),
+            ContentSection(label="0-3s Hook", content="镜头：面膜特写。口播：干皮姐妹先别划走。"),
+            ContentSection(label="3-12s 展示", content="画面：展示面膜质地。口播：精华质地清爽。"),
+            ContentSection(label="12-30s 转化", content="镜头：商品包装特写。口播：点击链接了解详情，引导行动。"),
         ],
     )
     result = validate_douyin(content)
@@ -74,13 +82,13 @@ def test_douyin_rejects_no_time_markers_and_few_sections():
     assert any("分镜" in e or "时间" in e for e in result.errors)
 
 
-def test_douyin_accepts_with_time_markers_in_body():
+def test_douyin_rejects_time_markers_without_complete_storyboards():
     content = make_content(Platform.DOUYIN, "补水面膜", "0-3s 开场\n3-12s 展示产品\n12-30s 引导下单")
     result = validate_douyin(content)
-    assert result.valid
+    assert not result.valid
 
 
-def test_douyin_accepts_with_enough_sections():
+def test_douyin_rejects_sections_without_time_camera_and_voiceover():
     content = make_content(
         Platform.DOUYIN, "脚本", "正文",
         sections=[
@@ -90,7 +98,37 @@ def test_douyin_accepts_with_enough_sections():
         ],
     )
     result = validate_douyin(content)
+    assert not result.valid
+
+
+def test_douyin_accepts_product_copy_without_storyboards():
+    content = GeneratedContent(
+        platform=Platform.DOUYIN,
+        content_type=ContentType.DOUYIN_PRODUCT_COPY,
+        title="轻量便携保温杯 通勤随行杯",
+        body="适合通勤、办公和日常出行使用，杯身轻巧便携，商品信息清晰，可直接用于抖音小店详情页。",
+        sections=[
+            ContentSection(label="核心卖点", content="轻量杯身，随手放进通勤包。"),
+            ContentSection(label="适用场景", content="适合办公桌、通勤和日常外出。"),
+        ],
+    )
+    result = validate_douyin(content)
     assert result.valid
+
+
+def test_douyin_product_copy_rejects_timed_script():
+    content = GeneratedContent(
+        platform=Platform.DOUYIN,
+        content_type=ContentType.DOUYIN_PRODUCT_COPY,
+        title="保温杯商品详情",
+        body="0-3秒展示商品，随后介绍核心卖点和使用场景。",
+        sections=[
+            ContentSection(label="核心卖点", content="轻量便携。"),
+            ContentSection(label="商品详情", content="适合通勤使用。"),
+        ],
+    )
+    result = validate_douyin(content)
+    assert not result.valid
 
 
 # --- Amazon ---
@@ -102,6 +140,7 @@ def test_amazon_valid_listing():
         sections=[
             ContentSection(label="Lightweight", content="Only 230g, easy to carry"),
             ContentSection(label="Leak Proof", content="Secure lid prevents spills"),
+            ContentSection(label="Daily Use", content="Designed for work and travel"),
         ],
     )
     result = validate_amazon(content)
@@ -115,6 +154,7 @@ def test_amazon_rejects_chinese_title():
         sections=[
             ContentSection(label="Lightweight", content="Only 230g"),
             ContentSection(label="Leak Proof", content="Secure lid"),
+            ContentSection(label="Daily Use", content="Easy to carry"),
         ],
     )
     result = validate_amazon(content)
@@ -129,6 +169,7 @@ def test_amazon_rejects_chinese_body():
         sections=[
             ContentSection(label="Lightweight", content="230g"),
             ContentSection(label="Leak Proof", content="No spills"),
+            ContentSection(label="Daily Use", content="Easy to carry"),
         ],
     )
     result = validate_amazon(content)
@@ -163,3 +204,20 @@ def test_xhs_content_rejected_as_amazon():
     ])
     result = validate_platform_content(content)
     assert not result.valid
+
+
+def test_explicit_cross_platform_generation_requires_choice():
+    choice = build_cross_platform_choice(ChatRequest(platform=Platform.XHS, message="帮我生成一个抖音脚本"))
+    assert choice is not None
+    message, questions = choice
+    assert "不能静默生成抖音格式" in message
+    assert questions[0]["options"] == ["转换为小红书内容", "新建抖音会话后生成"]
+
+
+def test_discussing_another_platform_does_not_require_choice():
+    assert build_cross_platform_choice(ChatRequest(platform=Platform.XHS, message="抖音最近有什么趋势？")) is None
+
+
+def test_converting_foreign_example_to_current_platform_does_not_require_choice():
+    request = ChatRequest(platform=Platform.XHS, message="把这份抖音脚本转换成小红书笔记")
+    assert build_cross_platform_choice(request) is None

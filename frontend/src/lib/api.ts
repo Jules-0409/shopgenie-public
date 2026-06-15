@@ -160,6 +160,18 @@ export interface PerformanceCsvPreview {
   preview: PerformanceRecord[];
 }
 
+export interface PlatformConnectorStatus {
+  platform: 'xhs' | 'dy' | 'amazon';
+  configured: boolean;
+  mode: 'read_only';
+}
+
+export interface PlatformSyncResult {
+  platform: string;
+  imported: number;
+  records: PerformanceRecord[];
+}
+
 export interface OperationsAction {
   id: string;
   priority: 'high' | 'medium' | 'low';
@@ -187,6 +199,7 @@ export interface ContentSection {
 
 export interface GeneratedContent {
   platform: Platform;
+  content_type?: 'standard' | 'douyin_script' | 'douyin_product_copy';
   title: string;
   body: string;
   tags: string[];
@@ -436,6 +449,10 @@ export const previewPerformanceCsv = (csvText: string) => requestJson<Performanc
 export const importPerformanceCsv = (csvText: string) => requestJson<{ imported: number }>('/shopgenie/api/performance/import', {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ csv_text: csvText }),
 });
+export const listPlatformConnectors = () => requestJson<PlatformConnectorStatus[]>('/shopgenie/api/platform-connectors');
+export const syncPlatformConnector = (platform: PlatformConnectorStatus['platform']) => requestJson<PlatformSyncResult>(`/shopgenie/api/platform-connectors/${platform}/sync`, {
+  method: 'POST',
+});
 
 export interface StoredSession {
   id: string;
@@ -455,49 +472,3 @@ export const saveStoredSession = (session: Omit<StoredSession, 'created_at' | 'u
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(session),
 });
 export const deleteStoredSession = (id: string) => requestJson<{ deleted: boolean }>(`/shopgenie/api/sessions/${id}`, { method: 'DELETE' });
-
-// --- Vision / Image Generation ---
-
-export interface ImageTemplate {
-  id: string;
-  name: string;
-  description: string;
-  aspect_ratio: string;
-  tags: string[];
-  prompt_template?: string;
-  builtin?: boolean;
-}
-
-export interface DesignTemplates {
-  templates: ImageTemplate[];
-  categories: Record<string, { name: string; template_ids: string[] }>;
-  platform_sizes: Record<string, string>;
-}
-
-export const getDesignTemplates = () => requestJson<DesignTemplates>('/shopgenie/api/studio/templates');
-
-export const createCustomTemplate = (data: {
-  name: string; description: string; prompt_template: string;
-  aspect_ratio?: string; tags?: string[]; category?: string; category_name?: string;
-}) => requestJson<ImageTemplate>('/shopgenie/api/studio/templates/custom', {
-  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
-});
-
-export const deleteCustomTemplate = (id: string) =>
-  requestJson<{ deleted: boolean }>(`/shopgenie/api/studio/templates/custom/${id}`, { method: 'DELETE' });
-
-export const generateImage = (prompt: string, size: string = '1024*1024') =>
-  requestJson<{ task_id: string; status: string }>('/shopgenie/api/vision/generate', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, size }),
-  });
-
-export interface ImageTaskResult {
-  output: {
-    task_id: string;
-    task_status: string;
-    results?: Array<{ url: string }>;
-  };
-}
-
-export const pollImageTask = (taskId: string) =>
-  requestJson<ImageTaskResult>(`/shopgenie/api/vision/generate/${taskId}`);
