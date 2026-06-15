@@ -449,9 +449,9 @@ export default function ResultCard({ card, brandName = '你的品牌', onRegener
       </header>
       <div className={`result-stage stage-${card.platform}`}>
         {card.platform === 'xhs' && <XhsPreview card={card} brandName={brandName} image={image} dragOver={dragOver} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} />}
-        {card.platform === 'dy' && card.content_type === 'douyin_product_copy'
+        {card.platform === 'dy' && (card.content_type === 'douyin_product_copy'
           ? <DouyinProductCopyPreview card={card} />
-          : card.platform === 'dy' && <DouyinPreview card={card} brandName={brandName} image={image} dragOver={dragOver} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} />}
+          : <DouyinPreview card={card} brandName={brandName} image={image} dragOver={dragOver} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} />)}
         {card.platform === 'amazon' && <AmazonPreview card={card} image={image} dragOver={dragOver} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop} />}
         {card.platform === 'cs' && <CSPreview card={card} onTweakVariant={onTweakVariant} />}
       </div>

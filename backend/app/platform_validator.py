@@ -50,9 +50,11 @@ def build_cross_platform_choice(request: ChatRequest) -> tuple[str, list[dict[st
         Platform.XHS: ("小红书", "xiaohongshu"),
         Platform.DOUYIN: ("抖音", "douyin"),
         Platform.AMAZON: ("amazon", "亚马逊"),
-        Platform.CS: ("客服话术", "客服模板"),
+        Platform.CS: ("客服话术", "客服模板", "客服回复", "售后话术", "售后模板"),
     }
-    current_terms = platform_terms[request.platform]
+    current_terms = platform_terms.get(request.platform)
+    if current_terms is None:
+        return None
     if any(term in text for term in current_terms):
         return None
     target = next(
@@ -67,7 +69,7 @@ def build_cross_platform_choice(request: ChatRequest) -> tuple[str, list[dict[st
         Platform.AMAZON: "Amazon",
         Platform.CS: "客服话术",
     }
-    current_label = labels[request.platform]
+    current_label = labels.get(request.platform, request.platform.value)
     target_label = labels[target]
     message = f"当前是{current_label}会话，不能静默生成{target_label}格式。请选择如何继续："
     questions = [{
