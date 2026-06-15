@@ -6,7 +6,9 @@
 
 [English](#english)
 
-![ShopGenie 界面](design/screenshots/v3-full.png)
+![ShopGenie 运营首页](design/screenshots/welcome.png)
+
+![小红书笔记预览](design/screenshots/xhs-preview.png)
 
 ---
 
@@ -110,7 +112,7 @@ MIT
 
 ---
 
-**刘巨富** — 全栈开发 · 产品设计 · AI 应用，独立完成。正在看新机会，联系我：liujufu019@gmail.com
+**刘具辅** — 全栈开发 · 产品设计 · AI 应用，独立完成。正在看新机会，联系我：liujufu019@gmail.com
 
 ---
 
@@ -184,4 +186,4 @@ MIT
 
 ---
 
-**Jules Liu** — Full-stack, product design, and AI integration, built solo. Open to opportunities: liujufu019@gmail.com
+**Jules Liu (刘具辅)** — Full-stack, product design, and AI integration, built solo. Open to opportunities: liujufu019@gmail.com
