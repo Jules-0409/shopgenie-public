@@ -6,10 +6,6 @@
 
 [English](#english)
 
-![ShopGenie 运营首页](design/screenshots/welcome.png)
-
-![小红书笔记预览](design/screenshots/xhs-preview.png)
-
 ---
 
 ## 它解决什么问题
