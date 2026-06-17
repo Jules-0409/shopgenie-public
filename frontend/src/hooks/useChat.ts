@@ -20,7 +20,8 @@ export interface Conversation {
 export const isProductContextLocked = (conversation: Conversation | null) =>
   Boolean(conversation?.messages.some((message) => !message.demo));
 
-const STORAGE_KEY = 'shopgenie.conversations.v1';
+const LEGACY_STORAGE_KEYS = ['shopgenie.conversations.v1'];
+const STORAGE_KEY = 'shopgenie.conversations.v2';
 
 const titleFromMessage = (text: string, platform: Platform) => {
   const clean = text.replace(/\s+/g, ' ').trim();
@@ -84,6 +85,9 @@ export function useChat(defaultProductId: string | null) {
   };
 
   const hydrate = useCallback(async () => {
+    for (const key of LEGACY_STORAGE_KEYS) {
+      window.localStorage.removeItem(key);
+    }
     // Try loading from backend first
     try {
       const stored = await listStoredSessions();
