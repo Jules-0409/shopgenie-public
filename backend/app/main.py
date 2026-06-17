@@ -15,6 +15,7 @@ from app.accounts import authenticate_account, create_account
 from app.auth import CurrentUser, create_signed_token, get_current_user, resolve_token_user
 from app.config import Settings, get_settings
 from app.deepseek import DeepSeekClient, DeepSeekError
+from app.default_knowledge import ensure_default_knowledge
 from app.stream import chat_stream_generator
 from app.memory import UserProfile, get_profile, save_profile, delete_profile
 from app.sessions import StoredSession, list_sessions, get_session, save_session, delete_session
@@ -119,6 +120,7 @@ async def api_register(req: RegisterRequest, settings: Settings = Depends(get_se
         account = await run_in_threadpool(create_account, req.username, req.password)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await run_in_threadpool(ensure_default_knowledge, account.owner_id)
     return AuthUserResponse(user_id=account.owner_id, token=create_signed_token(account.owner_id, settings))
 
 
@@ -574,6 +576,7 @@ class KnowledgeDiscoverInput(BaseModel):
 
 @app.get("/api/knowledge", response_model=list[KnowledgeSource])
 async def api_list_knowledge(current_user: CurrentUser = Depends(get_current_user)) -> list[KnowledgeSource]:
+    await run_in_threadpool(ensure_default_knowledge, current_user.id)
     return await run_in_threadpool(list_knowledge_sources, None, current_user.id)
 
 

@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import app.memory as memory
+from app.default_knowledge import ensure_default_knowledge
 from app.schemas import ContentSection, GeneratedContent, Platform
 from app.workspace import (
     Experiment,
@@ -96,10 +97,29 @@ def test_knowledge_task_and_performance_round_trip(tmp_path: Path) -> None:
     metric = save_performance(PerformanceRecord(asset_id="content_1", platform="xhs", impressions=100, conversions=3))
 
     assert "避免硬广" in build_knowledge_prompt(Platform.XHS)
-    assert list_knowledge_sources()[0].title == "小红书规则"
+    assert any(source.title == "小红书规则" for source in list_knowledge_sources())
     assert list_agent_tasks()[0].id == task.id
     assert list_performance()[0].id == metric.id
     assert build_performance_insights()["conversion_rate"] == 3.0
+
+
+def test_default_knowledge_is_seeded_per_owner_without_duplicates(tmp_path: Path) -> None:
+    use_db(tmp_path)
+
+    inserted_a = ensure_default_knowledge("merchant_a")
+    sources_a = list_knowledge_sources(owner_id="merchant_a")
+    inserted_again = ensure_default_knowledge("merchant_a")
+    sources_a_again = list_knowledge_sources(owner_id="merchant_a")
+    inserted_b = ensure_default_knowledge("merchant_b")
+    sources_b = list_knowledge_sources(owner_id="merchant_b")
+
+    assert inserted_a >= 10
+    assert inserted_again == 0
+    assert len(sources_a_again) == len(sources_a)
+    assert inserted_b == inserted_a
+    assert any(source.title == "抖音违禁词和审核规则" for source in sources_a)
+    assert any(source.title == "Amazon常见违规和处罚" for source in sources_b)
+    assert {source.id for source in sources_a}.isdisjoint({source.id for source in sources_b})
 
 
 def test_knowledge_retrieval_prefers_relevant_source(tmp_path: Path) -> None:

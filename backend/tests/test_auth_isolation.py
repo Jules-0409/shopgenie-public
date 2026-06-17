@@ -67,6 +67,7 @@ def test_register_login_and_signed_token_isolate_data(tmp_path: Path) -> None:
             token = login.json()["token"]
             product = client.post("/api/products", headers=_headers(token), json={"name": "账号商品"})
             products = client.get("/api/products", headers=_headers(token))
+            knowledge = client.get("/api/knowledge", headers=_headers(token))
     finally:
         app.dependency_overrides.clear()
 
@@ -78,6 +79,8 @@ def test_register_login_and_signed_token_isolate_data(tmp_path: Path) -> None:
     assert login.status_code == 200
     assert product.status_code == 200
     assert products.json()[0]["name"] == "账号商品"
+    assert any(source["title"] == "小红书内容审核红线" for source in knowledge.json())
+    assert any(source["title"] == "Amazon常见违规和处罚" for source in knowledge.json())
 
 
 def test_products_profiles_and_sessions_are_isolated_by_token(tmp_path: Path) -> None:

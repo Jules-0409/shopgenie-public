@@ -46,7 +46,8 @@ def test_workspace_api_flow(tmp_path: Path) -> None:
     assert source.status_code == 200
     assert performance.status_code == 200
     assert products.json()[0]["name"] == "轻量保温杯"
-    assert sources.json()[0]["title"] == "小红书规则"
+    assert any(source["title"] == "小红书规则" for source in sources.json())
+    assert any(source["title"] == "抖音违禁词和审核规则" for source in sources.json())
     assert metrics.json()[0]["conversions"] == 8
     assert operations.status_code == 200
     assert operations.json()["actions"]

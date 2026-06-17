@@ -3,6 +3,7 @@ import re
 
 from app.schemas import Platform
 from app.auth import DEFAULT_OWNER_ID
+from app.default_knowledge import ensure_default_knowledge
 from app.workspace import (
     KnowledgeSource,
     Product,
@@ -85,15 +86,17 @@ def learn_product_from_message(product: Product, message: str, owner_id: str = D
 
 
 def retrieve_knowledge(platform: Platform, query: str, limit: int = 5, owner_id: str = DEFAULT_OWNER_ID) -> list[KnowledgeSource]:
+    ensure_default_knowledge(owner_id)
     sources = list_knowledge_sources(platform.value, owner_id)
     terms = {term.lower() for term in re.findall(r"[\w\u4e00-\u9fff]{2,}", query)}
     scored = []
     for source in sources:
         haystack = f"{source.title} {source.content}".lower()
         score = sum(1 for term in terms if term in haystack)
-        scored.append((score, source.updated_at, source))
-    scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
-    return [source for _, _, source in scored[:limit]]
+        is_builtin = source.id.startswith(f"seed_{owner_id}_")
+        scored.append((score, not is_builtin, source.updated_at, source))
+    scored.sort(key=lambda item: (item[0], item[1], item[2]), reverse=True)
+    return [source for _, _, _, source in scored[:limit]]
 
 
 def build_knowledge_prompt(platform: Platform, query: str = "", owner_id: str = DEFAULT_OWNER_ID) -> str:
