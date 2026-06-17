@@ -35,6 +35,23 @@ def test_configured_auth_requires_bearer_token(tmp_path: Path) -> None:
     assert ok.status_code == 200
 
 
+def test_login_validates_access_code_and_me_uses_bearer_token(tmp_path: Path) -> None:
+    memory.DB_PATH = tmp_path / "auth_login.db"
+    app.dependency_overrides[get_settings] = _auth_settings
+    try:
+        with TestClient(app) as client:
+            bad = client.post("/api/auth/login", json={"access_code": "bad-token"})
+            login = client.post("/api/auth/login", json={"access_code": "token-a"})
+            me = client.get("/api/auth/me", headers=_headers("token-a"))
+    finally:
+        app.dependency_overrides.clear()
+
+    assert bad.status_code == 401
+    assert login.status_code == 200
+    assert login.json() == {"user_id": "merchant_a"}
+    assert me.json() == {"user_id": "merchant_a"}
+
+
 def test_products_profiles_and_sessions_are_isolated_by_token(tmp_path: Path) -> None:
     db_path = tmp_path / "isolated.db"
     memory.DB_PATH = db_path

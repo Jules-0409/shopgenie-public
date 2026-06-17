@@ -42,6 +42,18 @@ def _load_token_map(settings: Settings) -> dict[str, str]:
     return token_map
 
 
+def resolve_token_user(token: str, settings: Settings) -> CurrentUser | None:
+    clean = token.strip()
+    if not clean:
+        return None
+    token_map = _load_token_map(settings)
+    if token_map:
+        user_id = token_map.get(clean)
+        return CurrentUser(id=user_id) if user_id else None
+    # 未配置生产 token 时，本地开发允许把访问码当作 user_id 使用。
+    return CurrentUser(id=normalize_user_id(clean))
+
+
 def get_current_user(
     authorization: str | None = Header(default=None),
     x_user_id: str | None = Header(default=None, alias="X-User-Id"),
@@ -52,10 +64,10 @@ def get_current_user(
         scheme, _, token = (authorization or "").partition(" ")
         if scheme.lower() != "bearer" or not token:
             raise HTTPException(status_code=401, detail="缺少 Bearer 鉴权令牌")
-        user_id = token_map.get(token.strip())
-        if not user_id:
+        user = resolve_token_user(token, settings)
+        if not user:
             raise HTTPException(status_code=403, detail="鉴权令牌无效")
-        return CurrentUser(id=user_id)
+        return user
 
     # 本地开发 / 单用户部署兼容：未配置 token 时允许显式开发用户头。
     return CurrentUser(id=normalize_user_id(x_user_id))

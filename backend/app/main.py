@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import StreamingResponse
 
-from app.auth import CurrentUser, get_current_user
+from app.auth import CurrentUser, get_current_user, resolve_token_user
 from app.config import Settings, get_settings
 from app.deepseek import DeepSeekClient, DeepSeekError
 from app.stream import chat_stream_generator
@@ -79,6 +79,27 @@ app = FastAPI(title="ShopGenie API", version="0.1.0")
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+class LoginRequest(BaseModel):
+    access_code: str = Field(min_length=1, max_length=200)
+
+
+class AuthUserResponse(BaseModel):
+    user_id: str
+
+
+@app.post("/api/auth/login", response_model=AuthUserResponse)
+async def api_login(req: LoginRequest, settings: Settings = Depends(get_settings)) -> AuthUserResponse:
+    user = resolve_token_user(req.access_code, settings)
+    if not user:
+        raise HTTPException(status_code=401, detail="访问码无效")
+    return AuthUserResponse(user_id=user.id)
+
+
+@app.get("/api/auth/me", response_model=AuthUserResponse)
+async def api_me(current_user: CurrentUser = Depends(get_current_user)) -> AuthUserResponse:
+    return AuthUserResponse(user_id=current_user.id)
 
 
 def _ensure_chat_platform(request: ChatRequest) -> None:

@@ -238,6 +238,41 @@ export const EMPTY_PROFILE: UserProfile = {
   extra_notes: '',
 };
 
+export interface AuthUser {
+  user_id: string;
+}
+
+export function setAuthToken(token: string): void {
+  if (typeof window === 'undefined') return;
+  const clean = token.trim();
+  if (clean) {
+    localStorage.setItem('shopgenie.auth_token', clean);
+  } else {
+    localStorage.removeItem('shopgenie.auth_token');
+  }
+}
+
+export function clearAuthToken(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem('shopgenie.auth_token');
+  localStorage.removeItem('shopgenie.user_id');
+}
+
+export async function loginWithAccessCode(accessCode: string): Promise<AuthUser> {
+  const response = await fetch('/shopgenie/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ access_code: accessCode }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: string } | null;
+    throw new Error(body?.detail ?? '访问码无效');
+  }
+  return response.json() as Promise<AuthUser>;
+}
+
+export const getCurrentAuthUser = () => requestJson<AuthUser>('/shopgenie/api/auth/me');
+
 export async function getProfile(): Promise<UserProfile | null> {
   const data = await requestJson<{ profile: UserProfile | null }>('/shopgenie/api/profile');
   return data.profile;

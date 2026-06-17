@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Toaster from "@/components/Toaster";
-import { ChatProvider } from "@/context/ChatContext";
+import AuthGate from "@/components/AuthGate";
 
 export const metadata: Metadata = {
   title: "ShopGenie · 商店精灵",
@@ -16,9 +16,9 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" className="h-full antialiased">
       <body className="h-full overflow-hidden">
-        <ChatProvider defaultProductId={null}>
+        <AuthGate>
           {children}
-        </ChatProvider>
+        </AuthGate>
         <Toaster />
       </body>
     </html>
