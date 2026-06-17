@@ -92,7 +92,7 @@ export default function AuthGate({ children }: AuthGateProps) {
               <p>{mode === 'login' ? '登录你的运营工作台' : '创建一个新的商家账号'}</p>
             </div>
           </div>
-          <div className="auth-tabs" role="tablist" aria-label="登录方式">
+          <div className={`auth-tabs ${mode === 'register' ? 'register' : 'login'}`} role="tablist" aria-label="登录方式">
             <button className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setError(''); }} type="button">登录</button>
             <button className={mode === 'register' ? 'active' : ''} onClick={() => { setMode('register'); setError(''); }} type="button">注册</button>
           </div>
