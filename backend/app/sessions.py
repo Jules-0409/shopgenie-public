@@ -4,6 +4,8 @@ import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.auth import DEFAULT_OWNER_ID
+
 DB_PATH = Path(__file__).resolve().parent / "shopgenie.db"
 
 
@@ -26,6 +28,7 @@ def _get_connection() -> sqlite3.Connection:
     conn.execute("""
         CREATE TABLE IF NOT EXISTS sessions (
             id TEXT PRIMARY KEY,
+            owner_id TEXT NOT NULL DEFAULT 'default',
             platform TEXT NOT NULL,
             title TEXT NOT NULL DEFAULT '',
             product_id TEXT,
@@ -36,6 +39,12 @@ def _get_connection() -> sqlite3.Connection:
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    try:
+        conn.execute("SELECT owner_id FROM sessions LIMIT 0")
+    except sqlite3.OperationalError:
+        conn.execute("ALTER TABLE sessions ADD COLUMN owner_id TEXT NOT NULL DEFAULT 'default'")
+    conn.execute("UPDATE sessions SET owner_id = ? WHERE owner_id IS NULL OR owner_id = ''", (DEFAULT_OWNER_ID,))
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_owner_updated ON sessions(owner_id, updated_at)")
     # migration: add studio column if missing
     try:
         conn.execute("SELECT studio FROM sessions LIMIT 0")
@@ -70,19 +79,19 @@ def _parse_row(row: sqlite3.Row) -> StoredSession:
     )
 
 
-def list_sessions() -> list[StoredSession]:
+def list_sessions(owner_id: str = DEFAULT_OWNER_ID) -> list[StoredSession]:
     conn = _get_connection()
     try:
-        rows = conn.execute("SELECT * FROM sessions ORDER BY updated_at DESC").fetchall()
+        rows = conn.execute("SELECT * FROM sessions WHERE owner_id = ? ORDER BY updated_at DESC", (owner_id,)).fetchall()
         return [_parse_row(row) for row in rows]
     finally:
         conn.close()
 
 
-def get_session(session_id: str) -> StoredSession | None:
+def get_session(session_id: str, owner_id: str = DEFAULT_OWNER_ID) -> StoredSession | None:
     conn = _get_connection()
     try:
-        row = conn.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)).fetchone()
+        row = conn.execute("SELECT * FROM sessions WHERE id = ? AND owner_id = ?", (session_id, owner_id)).fetchone()
         if row:
             return _parse_row(row)
         return None
@@ -90,17 +99,20 @@ def get_session(session_id: str) -> StoredSession | None:
         conn.close()
 
 
-def save_session(session: StoredSession) -> None:
+def save_session(session: StoredSession, owner_id: str = DEFAULT_OWNER_ID) -> None:
     conn = _get_connection()
     try:
         messages_json = json.dumps(session.messages, ensure_ascii=False)
         studio_json = json.dumps(session.studio, ensure_ascii=False) if session.studio else None
         product_id = session.product_id if session.product_binding_confirmed else None
+        existing = conn.execute("SELECT owner_id FROM sessions WHERE id = ?", (session.id,)).fetchone()
+        if existing and existing["owner_id"] != owner_id:
+            raise ValueError("会话 ID 已属于其他用户")
         conn.execute(
-            "INSERT INTO sessions (id, platform, title, product_id, product_binding_confirmed, messages, studio, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) "
+            "INSERT INTO sessions (id, owner_id, platform, title, product_id, product_binding_confirmed, messages, studio, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) "
             "ON CONFLICT(id) DO UPDATE SET title=?, product_id=?, product_binding_confirmed=?, messages=?, studio=?, updated_at=CURRENT_TIMESTAMP",
-            (session.id, session.platform, session.title, product_id, int(session.product_binding_confirmed), messages_json, studio_json,
+            (session.id, owner_id, session.platform, session.title, product_id, int(session.product_binding_confirmed), messages_json, studio_json,
              session.title, product_id, int(session.product_binding_confirmed), messages_json, studio_json),
         )
         conn.commit()
@@ -108,22 +120,22 @@ def save_session(session: StoredSession) -> None:
         conn.close()
 
 
-def delete_session(session_id: str) -> bool:
+def delete_session(session_id: str, owner_id: str = DEFAULT_OWNER_ID) -> bool:
     conn = _get_connection()
     try:
-        cursor = conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+        cursor = conn.execute("DELETE FROM sessions WHERE id = ? AND owner_id = ?", (session_id, owner_id))
         conn.commit()
         return cursor.rowcount > 0
     finally:
         conn.close()
 
 
-def update_session_title(session_id: str, title: str) -> None:
+def update_session_title(session_id: str, title: str, owner_id: str = DEFAULT_OWNER_ID) -> None:
     conn = _get_connection()
     try:
         conn.execute(
-            "UPDATE sessions SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            (title, session_id),
+            "UPDATE sessions SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND owner_id = ?",
+            (title, session_id, owner_id),
         )
         conn.commit()
     finally:

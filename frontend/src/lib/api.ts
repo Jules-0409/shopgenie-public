@@ -267,10 +267,7 @@ export async function* sendChatStream(
 ): AsyncGenerator<StreamEvent> {
   const response = await fetch('/shopgenie/api/chat/stream', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-User-Id': getUserIdHeader()
-    },
+    headers: applyAuthHeaders(new Headers({ 'Content-Type': 'application/json' })),
     body: JSON.stringify({ platform, message, history, product_id: productId || null, image_url: imageUrl || null }),
     signal,
   });
@@ -326,6 +323,29 @@ export function getUserIdHeader(): string {
   return 'default';
 }
 
+export function getAuthToken(): string {
+  if (typeof window !== 'undefined') {
+    const params = new URLSearchParams(window.location.search);
+    const urlToken = params.get('auth_token');
+    if (urlToken) {
+      localStorage.setItem('shopgenie.auth_token', urlToken);
+      return urlToken;
+    }
+    return localStorage.getItem('shopgenie.auth_token') || process.env.NEXT_PUBLIC_SHOPGENIE_API_TOKEN || '';
+  }
+  return process.env.NEXT_PUBLIC_SHOPGENIE_API_TOKEN || '';
+}
+
+function applyAuthHeaders(headers: Headers): Headers {
+  const token = getAuthToken();
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  } else {
+    headers.set('X-User-Id', getUserIdHeader());
+  }
+  return headers;
+}
+
 export async function sendChat(
   platform: Platform,
   message: string,
@@ -335,10 +355,7 @@ export async function sendChat(
 ): Promise<ChatApiResponse> {
   const response = await fetch('/shopgenie/api/chat', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-User-Id': getUserIdHeader()
-    },
+    headers: applyAuthHeaders(new Headers({ 'Content-Type': 'application/json' })),
     body: JSON.stringify({ platform, message, history, product_id: productId || null }),
     signal,
   });
@@ -353,7 +370,7 @@ export async function sendChat(
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
-  headers.set('X-User-Id', getUserIdHeader());
+  applyAuthHeaders(headers);
   const response = await fetch(url, {
     ...init,
     headers,

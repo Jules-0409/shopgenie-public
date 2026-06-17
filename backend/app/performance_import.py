@@ -3,6 +3,7 @@ import csv
 import io
 from dataclasses import asdict
 
+from app.auth import DEFAULT_OWNER_ID
 from app.workspace import PerformanceRecord, get_content_asset, save_performance_batch
 
 MAX_CSV_CHARS = 200_000
@@ -24,7 +25,7 @@ def _parse_number(value: str, field: str, row_number: int, *, integer: bool) -> 
     return number
 
 
-def parse_performance_csv(csv_text: str) -> list[PerformanceRecord]:
+def parse_performance_csv(csv_text: str, owner_id: str = DEFAULT_OWNER_ID) -> list[PerformanceRecord]:
     text = (csv_text or "").strip()
     if not text:
         raise ValueError("CSV 内容为空")
@@ -42,7 +43,7 @@ def parse_performance_csv(csv_text: str) -> list[PerformanceRecord]:
         asset_id = (row.get("asset_id") or "").strip()
         if not asset_id:
             raise ValueError(f"第 {row_number} 行：asset_id 不能为空")
-        asset = get_content_asset(asset_id)
+        asset = get_content_asset(asset_id, owner_id)
         if not asset:
             raise ValueError(f"第 {row_number} 行：内容资产 {asset_id} 不存在")
         values = {
@@ -64,8 +65,8 @@ def parse_performance_csv(csv_text: str) -> list[PerformanceRecord]:
     return records
 
 
-def preview_performance_csv(csv_text: str) -> dict[str, object]:
-    records = parse_performance_csv(csv_text)
+def preview_performance_csv(csv_text: str, owner_id: str = DEFAULT_OWNER_ID) -> dict[str, object]:
+    records = parse_performance_csv(csv_text, owner_id)
     return {
         "valid": True,
         "rows": len(records),
@@ -73,7 +74,7 @@ def preview_performance_csv(csv_text: str) -> dict[str, object]:
     }
 
 
-def import_performance_csv(csv_text: str) -> dict[str, object]:
-    records = parse_performance_csv(csv_text)
-    save_performance_batch(records)
+def import_performance_csv(csv_text: str, owner_id: str = DEFAULT_OWNER_ID) -> dict[str, object]:
+    records = parse_performance_csv(csv_text, owner_id)
+    save_performance_batch(records, owner_id)
     return {"imported": len(records)}

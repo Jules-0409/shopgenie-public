@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import StreamingResponse
 
+from app.auth import CurrentUser, get_current_user
 from app.config import Settings, get_settings
 from app.deepseek import DeepSeekClient, DeepSeekError
 from app.stream import chat_stream_generator
@@ -88,23 +89,27 @@ def _ensure_chat_platform(request: ChatRequest) -> None:
 
 
 @app.post("/api/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest, settings: Settings = Depends(get_settings)) -> ChatResponse:
+async def chat(
+    request: ChatRequest,
+    settings: Settings = Depends(get_settings),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ChatResponse:
     _ensure_chat_platform(request)
     task: AgentTask | None = None
     try:
-        profile = await run_in_threadpool(get_profile)
-        product = await run_in_threadpool(get_product, request.product_id) if request.product_id else None
+        profile = await run_in_threadpool(get_profile, current_user.id)
+        product = await run_in_threadpool(get_product, request.product_id, current_user.id) if request.product_id else None
         if request.product_id and not product:
             raise HTTPException(status_code=404, detail="当前会话绑定的商品不存在，请重新选择商品后新建会话")
         if product:
-            product = await run_in_threadpool(learn_product_from_message, product, request.message)
-        task = await run_in_threadpool(create_agent_task, request.message)
+            product = await run_in_threadpool(learn_product_from_message, product, request.message, current_user.id)
+        task = await run_in_threadpool(create_agent_task, request.message, current_user.id)
         if needs_web_discovery(request.message):
             try:
-                await discover_knowledge(request.message, request.platform)
+                await discover_knowledge(request.message, request.platform, current_user.id)
             except (httpx.HTTPError, ValueError) as exc:
                 logging.getLogger(__name__).warning("Knowledge discovery failed: %s", exc)
-        response = await DeepSeekClient(settings, profile=profile, product=product).chat(request)
+        response = await DeepSeekClient(settings, profile=profile, product=product, owner_id=current_user.id).chat(request)
         response.task_id = task.id
         if response.result is not None:
             asset, version = await run_in_threadpool(
@@ -112,24 +117,30 @@ async def chat(request: ChatRequest, settings: Settings = Depends(get_settings))
                 response.result,
                 request.product_id,
                 response.warnings,
+                "AI 初稿",
+                current_user.id,
             )
             response.asset_id = asset.id
             response.quality = version.quality
-            await run_in_threadpool(complete_agent_task, task, f"已生成内容并保存为 {asset.name}")
+            await run_in_threadpool(complete_agent_task, task, f"已生成内容并保存为 {asset.name}", current_user.id)
         else:
-            await run_in_threadpool(complete_agent_task, task, response.message[:200])
+            await run_in_threadpool(complete_agent_task, task, response.message[:200], current_user.id)
         return response
     except DeepSeekError as exc:
         if task:
-            await run_in_threadpool(fail_agent_task, task, str(exc))
+            await run_in_threadpool(fail_agent_task, task, str(exc), current_user.id)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @app.post("/api/chat/stream")
-async def chat_stream(request: ChatRequest, settings: Settings = Depends(get_settings)) -> StreamingResponse:
+async def chat_stream(
+    request: ChatRequest,
+    settings: Settings = Depends(get_settings),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> StreamingResponse:
     _ensure_chat_platform(request)
     return StreamingResponse(
-        chat_stream_generator(request, settings),
+        chat_stream_generator(request, settings, current_user.id),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
@@ -155,15 +166,15 @@ class ProfileUpdateRequest(BaseModel):
 
 
 @app.get("/api/profile", response_model=ProfileResponse)
-async def api_get_profile() -> ProfileResponse:
-    profile = await run_in_threadpool(get_profile)
+async def api_get_profile(current_user: CurrentUser = Depends(get_current_user)) -> ProfileResponse:
+    profile = await run_in_threadpool(get_profile, current_user.id)
     return ProfileResponse(profile=profile, exists=profile is not None)
 
 
 @app.post("/api/profile", response_model=ProfileResponse)
-async def api_save_profile(req: ProfileUpdateRequest) -> ProfileResponse:
+async def api_save_profile(req: ProfileUpdateRequest, current_user: CurrentUser = Depends(get_current_user)) -> ProfileResponse:
     profile = UserProfile(
-        id="default",
+        id=current_user.id,
         brand_name=req.brand_name,
         category=req.category,
         target_audience=req.target_audience,
@@ -178,8 +189,8 @@ async def api_save_profile(req: ProfileUpdateRequest) -> ProfileResponse:
 
 
 @app.delete("/api/profile")
-async def api_delete_profile() -> dict[str, bool]:
-    deleted = await run_in_threadpool(delete_profile)
+async def api_delete_profile(current_user: CurrentUser = Depends(get_current_user)) -> dict[str, bool]:
+    deleted = await run_in_threadpool(delete_profile, current_user.id)
     return {"deleted": deleted}
 
 
@@ -194,28 +205,28 @@ class ProductInput(BaseModel):
 
 
 @app.get("/api/products", response_model=list[Product])
-async def api_list_products() -> list[Product]:
-    return await run_in_threadpool(list_products)
+async def api_list_products(current_user: CurrentUser = Depends(get_current_user)) -> list[Product]:
+    return await run_in_threadpool(list_products, current_user.id)
 
 
 @app.post("/api/products", response_model=Product)
-async def api_create_product(req: ProductInput) -> Product:
-    return await run_in_threadpool(save_product, Product(**req.model_dump()))
+async def api_create_product(req: ProductInput, current_user: CurrentUser = Depends(get_current_user)) -> Product:
+    return await run_in_threadpool(save_product, Product(**req.model_dump()), current_user.id)
 
 
 @app.put("/api/products/{product_id}", response_model=Product)
-async def api_update_product(product_id: str, req: ProductInput) -> Product:
-    product = await run_in_threadpool(get_product, product_id)
+async def api_update_product(product_id: str, req: ProductInput, current_user: CurrentUser = Depends(get_current_user)) -> Product:
+    product = await run_in_threadpool(get_product, product_id, current_user.id)
     if not product:
         raise HTTPException(status_code=404, detail="商品不存在")
     for key, value in req.model_dump().items():
         setattr(product, key, value)
-    return await run_in_threadpool(save_product, product)
+    return await run_in_threadpool(save_product, product, current_user.id)
 
 
 @app.delete("/api/products/{product_id}")
-async def api_delete_product(product_id: str) -> dict[str, bool]:
-    return {"deleted": await run_in_threadpool(delete_product, product_id)}
+async def api_delete_product(product_id: str, current_user: CurrentUser = Depends(get_current_user)) -> dict[str, bool]:
+    return {"deleted": await run_in_threadpool(delete_product, product_id, current_user.id)}
 
 
 class ReviewAnalyzeInput(BaseModel):
@@ -224,10 +235,13 @@ class ReviewAnalyzeInput(BaseModel):
 
 @app.post("/api/products/{product_id}/reviews/analyze", response_model=Product)
 async def api_analyze_reviews(
-    product_id: str, req: ReviewAnalyzeInput, settings: Settings = Depends(get_settings)
+    product_id: str,
+    req: ReviewAnalyzeInput,
+    settings: Settings = Depends(get_settings),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> Product:
     """评论反哺：分析买家评价，提炼洞察并存进商品事实库。"""
-    product = await run_in_threadpool(get_product, product_id)
+    product = await run_in_threadpool(get_product, product_id, current_user.id)
     if not product:
         raise HTTPException(status_code=404, detail="商品不存在")
     try:
@@ -239,17 +253,17 @@ async def api_analyze_reviews(
     product.review_insights = insights
     product.review_insights["product_id"] = product.id
     product.review_insights["product_name"] = product.name
-    return await run_in_threadpool(save_product, product)
+    return await run_in_threadpool(save_product, product, current_user.id)
 
 
 @app.delete("/api/products/{product_id}/reviews", response_model=Product)
-async def api_clear_reviews(product_id: str) -> Product:
+async def api_clear_reviews(product_id: str, current_user: CurrentUser = Depends(get_current_user)) -> Product:
     """清除某商品的评论洞察。"""
-    product = await run_in_threadpool(get_product, product_id)
+    product = await run_in_threadpool(get_product, product_id, current_user.id)
     if not product:
         raise HTTPException(status_code=404, detail="商品不存在")
     product.review_insights = None
-    return await run_in_threadpool(save_product, product)
+    return await run_in_threadpool(save_product, product, current_user.id)
 
 
 # ── A/B 实验：变体生成 → 效果录入 → 赢家反哺 ──
@@ -269,15 +283,22 @@ class VariantMetricsInput(BaseModel):
 
 
 @app.get("/api/experiments", response_model=list[Experiment])
-async def api_list_experiments(product_id: str | None = None) -> list[Experiment]:
-    return await run_in_threadpool(list_experiments, product_id)
+async def api_list_experiments(
+    product_id: str | None = None,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> list[Experiment]:
+    return await run_in_threadpool(list_experiments, product_id, current_user.id)
 
 
 @app.post("/api/experiments/generate", response_model=Experiment)
-async def api_generate_experiment(req: ExperimentGenerateInput, settings: Settings = Depends(get_settings)) -> Experiment:
+async def api_generate_experiment(
+    req: ExperimentGenerateInput,
+    settings: Settings = Depends(get_settings),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Experiment:
     if req.platform == Platform.STUDIO:
         raise HTTPException(status_code=422, detail="商品图工作室不支持 A/B 实验")
-    product = await run_in_threadpool(get_product, req.product_id) if req.product_id else None
+    product = await run_in_threadpool(get_product, req.product_id, current_user.id) if req.product_id else None
     if req.product_id and not product:
         raise HTTPException(status_code=404, detail="商品不存在")
     try:
@@ -288,12 +309,16 @@ async def api_generate_experiment(req: ExperimentGenerateInput, settings: Settin
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     name = (product.name if product else req.brief[:20]) or "未命名实验"
     experiment = Experiment(product_id=req.product_id, platform=req.platform.value, name=name, brief=req.brief, variants=variants)
-    return await run_in_threadpool(save_experiment, experiment)
+    return await run_in_threadpool(save_experiment, experiment, current_user.id)
 
 
 @app.post("/api/experiments/{experiment_id}/metrics", response_model=Experiment)
-async def api_record_variant_metrics(experiment_id: str, req: VariantMetricsInput) -> Experiment:
-    experiment = await run_in_threadpool(get_experiment, experiment_id)
+async def api_record_variant_metrics(
+    experiment_id: str,
+    req: VariantMetricsInput,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> Experiment:
+    experiment = await run_in_threadpool(get_experiment, experiment_id, current_user.id)
     if not experiment:
         raise HTTPException(status_code=404, detail="实验不存在")
     variant = next((v for v in experiment.variants if v.get("label") == req.label), None)
@@ -307,12 +332,12 @@ async def api_record_variant_metrics(experiment_id: str, req: VariantMetricsInpu
     variant["clicks"] = req.clicks
     variant["conversions"] = req.conversions
     compute_winner(experiment)
-    return await run_in_threadpool(save_experiment, experiment)
+    return await run_in_threadpool(save_experiment, experiment, current_user.id)
 
 
 @app.delete("/api/experiments/{experiment_id}")
-async def api_delete_experiment(experiment_id: str) -> dict[str, bool]:
-    return {"deleted": await run_in_threadpool(delete_experiment, experiment_id)}
+async def api_delete_experiment(experiment_id: str, current_user: CurrentUser = Depends(get_current_user)) -> dict[str, bool]:
+    return {"deleted": await run_in_threadpool(delete_experiment, experiment_id, current_user.id)}
 
 
 # ── 批量生成：一个商品一键产出多平台内容 ──
@@ -334,24 +359,30 @@ class BatchResultItem(BaseModel):
 
 
 @app.post("/api/batch/generate", response_model=list[BatchResultItem])
-async def api_batch_generate(req: BatchGenerateInput, settings: Settings = Depends(get_settings)) -> list[BatchResultItem]:
+async def api_batch_generate(
+    req: BatchGenerateInput,
+    settings: Settings = Depends(get_settings),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> list[BatchResultItem]:
     """一个商品/描述并行产出多个平台的内容，各自保存为内容资产。"""
     platforms = [p for p in dict.fromkeys(req.platforms) if p != Platform.STUDIO]
     if not platforms:
         raise HTTPException(status_code=422, detail="请选择至少一个内容平台（不含商品图工作室）")
-    profile = await run_in_threadpool(get_profile)
-    product = await run_in_threadpool(get_product, req.product_id) if req.product_id else None
+    profile = await run_in_threadpool(get_profile, current_user.id)
+    product = await run_in_threadpool(get_product, req.product_id, current_user.id) if req.product_id else None
     if req.product_id and not product:
         raise HTTPException(status_code=404, detail="商品不存在")
 
     async def gen_one(platform: Platform) -> BatchResultItem:
         try:
             request = ChatRequest(platform=platform, message=req.brief, history=[], product_id=req.product_id)
-            response = await DeepSeekClient(settings, profile=profile, product=product).chat(request)
+            response = await DeepSeekClient(settings, profile=profile, product=product, owner_id=current_user.id).chat(request)
             asset_id = None
             quality = None
             if response.result is not None:
-                asset, version = await run_in_threadpool(create_content_asset, response.result, req.product_id, response.warnings)
+                asset, version = await run_in_threadpool(
+                    create_content_asset, response.result, req.product_id, response.warnings, "AI 初稿", current_user.id,
+                )
                 asset_id = asset.id
                 quality = version.quality
             return BatchResultItem(platform=platform.value, message=response.message, result=response.result, asset_id=asset_id, quality=quality, warnings=response.warnings)
@@ -362,18 +393,18 @@ async def api_batch_generate(req: BatchGenerateInput, settings: Settings = Depen
 
 
 @app.get("/api/content", response_model=list[ContentAsset])
-async def api_list_content() -> list[ContentAsset]:
-    return await run_in_threadpool(list_content_assets)
+async def api_list_content(current_user: CurrentUser = Depends(get_current_user)) -> list[ContentAsset]:
+    return await run_in_threadpool(list_content_assets, current_user.id)
 
 
 @app.get("/api/content/{asset_id}/versions", response_model=list[ContentVersion])
-async def api_list_versions(asset_id: str) -> list[ContentVersion]:
-    return await run_in_threadpool(list_content_versions, asset_id)
+async def api_list_versions(asset_id: str, current_user: CurrentUser = Depends(get_current_user)) -> list[ContentVersion]:
+    return await run_in_threadpool(list_content_versions, asset_id, current_user.id)
 
 
 @app.delete("/api/content/{asset_id}")
-async def api_delete_content(asset_id: str) -> dict[str, bool]:
-    return {"deleted": await run_in_threadpool(delete_content_asset, asset_id)}
+async def api_delete_content(asset_id: str, current_user: CurrentUser = Depends(get_current_user)) -> dict[str, bool]:
+    return {"deleted": await run_in_threadpool(delete_content_asset, asset_id, current_user.id)}
 
 
 class ScheduleAssetInput(BaseModel):
@@ -381,17 +412,21 @@ class ScheduleAssetInput(BaseModel):
 
 
 @app.post("/api/content/{asset_id}/schedule", response_model=ContentAsset)
-async def api_schedule_asset(asset_id: str, req: ScheduleAssetInput) -> ContentAsset:
-    asset = await run_in_threadpool(get_content_asset, asset_id)
+async def api_schedule_asset(
+    asset_id: str,
+    req: ScheduleAssetInput,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ContentAsset:
+    asset = await run_in_threadpool(get_content_asset, asset_id, current_user.id)
     if not asset:
         raise HTTPException(status_code=404, detail="内容资产不存在")
     asset.scheduled_at = req.scheduled_at
-    return await run_in_threadpool(save_content_asset, asset)
+    return await run_in_threadpool(save_content_asset, asset, current_user.id)
 
 
 @app.get("/api/marketing/calendar")
-async def api_get_marketing_calendar() -> dict[str, Any]:
-    profile = await run_in_threadpool(get_profile)
+async def api_get_marketing_calendar(current_user: CurrentUser = Depends(get_current_user)) -> dict[str, Any]:
+    profile = await run_in_threadpool(get_profile, current_user.id)
     category = profile.category if profile else None
 
     events = []
@@ -406,7 +441,7 @@ async def api_get_marketing_calendar() -> dict[str, Any]:
             "topics": topics
         })
 
-    assets = await run_in_threadpool(list_content_assets)
+    assets = await run_in_threadpool(list_content_assets, current_user.id)
     # Filter only assets that have scheduled_at set
     scheduled_assets = [
         {
@@ -430,9 +465,13 @@ class ContentVersionInput(BaseModel):
 
 
 @app.post("/api/content/{asset_id}/versions", response_model=ContentVersion)
-async def api_add_version(asset_id: str, req: ContentVersionInput) -> ContentVersion:
+async def api_add_version(
+    asset_id: str,
+    req: ContentVersionInput,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ContentVersion:
     try:
-        return await run_in_threadpool(add_content_version, asset_id, req.content, req.change_note)
+        return await run_in_threadpool(add_content_version, asset_id, req.content, req.change_note, current_user.id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -446,13 +485,14 @@ async def api_revise_content(
     asset_id: str,
     req: ReviseContentInput,
     settings: Settings = Depends(get_settings),
+    current_user: CurrentUser = Depends(get_current_user),
 ) -> ContentVersion:
-    asset = await run_in_threadpool(lambda: next((item for item in list_content_assets() if item.id == asset_id), None))
-    current = await run_in_threadpool(get_current_version, asset_id)
+    asset = await run_in_threadpool(get_content_asset, asset_id, current_user.id)
+    current = await run_in_threadpool(get_current_version, asset_id, current_user.id)
     if not asset or not current:
         raise HTTPException(status_code=404, detail="内容资产不存在")
-    profile = await run_in_threadpool(get_profile)
-    product = await run_in_threadpool(get_product, asset.product_id) if asset.product_id else None
+    profile = await run_in_threadpool(get_profile, current_user.id)
+    product = await run_in_threadpool(get_product, asset.product_id, current_user.id) if asset.product_id else None
     original = GeneratedContent.model_validate(current.content)
     history_text = original.model_dump_json()[:4000]
     request = ChatRequest(
@@ -461,10 +501,10 @@ async def api_revise_content(
         history=[{"role": "assistant", "content": history_text}],
         product_id=asset.product_id,
     )
-    response = await DeepSeekClient(settings, profile=profile, product=product).chat(request)
+    response = await DeepSeekClient(settings, profile=profile, product=product, owner_id=current_user.id).chat(request)
     if response.result is None:
         raise HTTPException(status_code=502, detail="模型没有返回可保存的修改版本")
-    return await run_in_threadpool(add_content_version, asset_id, response.result, f"AI 修改：{req.instruction}")
+    return await run_in_threadpool(add_content_version, asset_id, response.result, f"AI 修改：{req.instruction}", current_user.id)
 
 
 class KnowledgeSourceInput(BaseModel):
@@ -487,19 +527,22 @@ class KnowledgeDiscoverInput(BaseModel):
 
 
 @app.get("/api/knowledge", response_model=list[KnowledgeSource])
-async def api_list_knowledge() -> list[KnowledgeSource]:
-    return await run_in_threadpool(list_knowledge_sources)
+async def api_list_knowledge(current_user: CurrentUser = Depends(get_current_user)) -> list[KnowledgeSource]:
+    return await run_in_threadpool(list_knowledge_sources, None, current_user.id)
 
 
 @app.post("/api/knowledge", response_model=KnowledgeSource)
-async def api_create_knowledge(req: KnowledgeSourceInput) -> KnowledgeSource:
+async def api_create_knowledge(req: KnowledgeSourceInput, current_user: CurrentUser = Depends(get_current_user)) -> KnowledgeSource:
     data = req.model_dump()
     data["platform"] = req.platform.value if req.platform else None
-    return await run_in_threadpool(save_knowledge_source, KnowledgeSource(**data))
+    return await run_in_threadpool(save_knowledge_source, KnowledgeSource(**data), current_user.id)
 
 
 @app.post("/api/knowledge/import", response_model=KnowledgeSource)
-async def api_import_knowledge(req: KnowledgeImportInput) -> KnowledgeSource:
+async def api_import_knowledge(
+    req: KnowledgeImportInput,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> KnowledgeSource:
     try:
         title, content = await fetch_public_page(req.url)
     except (ValueError, httpx.HTTPError) as exc:
@@ -511,20 +554,23 @@ async def api_import_knowledge(req: KnowledgeImportInput) -> KnowledgeSource:
         content=content,
         url=req.url,
     )
-    return await run_in_threadpool(save_knowledge_source, source)
+    return await run_in_threadpool(save_knowledge_source, source, current_user.id)
 
 
 @app.post("/api/knowledge/discover", response_model=list[KnowledgeSource])
-async def api_discover_knowledge(req: KnowledgeDiscoverInput) -> list[KnowledgeSource]:
+async def api_discover_knowledge(
+    req: KnowledgeDiscoverInput,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> list[KnowledgeSource]:
     try:
-        return await discover_knowledge(req.query, req.platform)
+        return await discover_knowledge(req.query, req.platform, current_user.id)
     except (httpx.HTTPError, ValueError) as exc:
         raise HTTPException(status_code=502, detail=f"公开网页检索失败：{exc}") from exc
 
 
 @app.get("/api/tasks", response_model=list[AgentTask])
-async def api_list_tasks() -> list[AgentTask]:
-    return await run_in_threadpool(list_agent_tasks)
+async def api_list_tasks(current_user: CurrentUser = Depends(get_current_user)) -> list[AgentTask]:
+    return await run_in_threadpool(list_agent_tasks, current_user.id)
 
 
 class AgentRunInput(BaseModel):
@@ -538,15 +584,19 @@ class AgentRunResponse(BaseModel):
 
 
 @app.post("/api/tasks/run", response_model=AgentRunResponse)
-async def api_run_task(req: AgentRunInput, settings: Settings = Depends(get_settings)) -> AgentRunResponse:
-    task = await run_in_threadpool(create_agent_task, req.objective)
-    asset = await run_in_threadpool(lambda: next((item for item in list_content_assets() if item.id == req.asset_id), None))
-    current = await run_in_threadpool(get_current_version, req.asset_id)
+async def api_run_task(
+    req: AgentRunInput,
+    settings: Settings = Depends(get_settings),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> AgentRunResponse:
+    task = await run_in_threadpool(create_agent_task, req.objective, current_user.id)
+    asset = await run_in_threadpool(get_content_asset, req.asset_id, current_user.id)
+    current = await run_in_threadpool(get_current_version, req.asset_id, current_user.id)
     if not asset or not current:
-        await run_in_threadpool(fail_agent_task, task, "内容资产不存在")
+        await run_in_threadpool(fail_agent_task, task, "内容资产不存在", current_user.id)
         raise HTTPException(status_code=404, detail="内容资产不存在")
-    profile = await run_in_threadpool(get_profile)
-    product = await run_in_threadpool(get_product, asset.product_id) if asset.product_id else None
+    profile = await run_in_threadpool(get_profile, current_user.id)
+    product = await run_in_threadpool(get_product, asset.product_id, current_user.id) if asset.product_id else None
     original = GeneratedContent.model_validate(current.content)
     request = ChatRequest(
         platform=Platform(asset.platform),
@@ -555,14 +605,14 @@ async def api_run_task(req: AgentRunInput, settings: Settings = Depends(get_sett
         product_id=asset.product_id,
     )
     try:
-        response = await DeepSeekClient(settings, profile=profile, product=product).chat(request)
+        response = await DeepSeekClient(settings, profile=profile, product=product, owner_id=current_user.id).chat(request)
         if response.result is None:
             raise DeepSeekError("Agent 没有返回可保存的成品")
-        version = await run_in_threadpool(add_content_version, asset.id, response.result, f"Agent 任务：{req.objective}")
-        await run_in_threadpool(complete_agent_task, task, f"已创建 v{version.version}，质量分 {version.quality['score']}")
+        version = await run_in_threadpool(add_content_version, asset.id, response.result, f"Agent 任务：{req.objective}", current_user.id)
+        await run_in_threadpool(complete_agent_task, task, f"已创建 v{version.version}，质量分 {version.quality['score']}", current_user.id)
         return AgentRunResponse(task=task, version=version)
     except DeepSeekError as exc:
-        await run_in_threadpool(fail_agent_task, task, str(exc))
+        await run_in_threadpool(fail_agent_task, task, str(exc), current_user.id)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
@@ -582,35 +632,48 @@ class PerformanceInput(BaseModel):
 
 
 @app.get("/api/performance", response_model=list[PerformanceRecord])
-async def api_list_performance() -> list[PerformanceRecord]:
-    return await run_in_threadpool(list_performance)
+async def api_list_performance(current_user: CurrentUser = Depends(get_current_user)) -> list[PerformanceRecord]:
+    return await run_in_threadpool(list_performance, None, current_user.id)
 
 
 @app.get("/api/performance/insights")
-async def api_performance_insights() -> dict[str, int | float | str]:
-    return await run_in_threadpool(build_performance_insights)
+async def api_performance_insights(current_user: CurrentUser = Depends(get_current_user)) -> dict[str, int | float | str]:
+    return await run_in_threadpool(build_performance_insights, current_user.id)
 
 
 @app.get("/api/operations/brief")
-async def api_operations_brief() -> dict[str, object]:
-    return await run_in_threadpool(build_operations_brief)
+async def api_operations_brief(current_user: CurrentUser = Depends(get_current_user)) -> dict[str, object]:
+    return await run_in_threadpool(build_operations_brief, current_user.id)
 
 
 @app.post("/api/operations/actions/{action_id}/state")
-async def api_update_action_state(action_id: str, req: ActionStateRequest) -> dict[str, bool]:
-    await run_in_threadpool(save_action_state, action_id, req.state, req.metric_snapshot)
+async def api_update_action_state(
+    action_id: str,
+    req: ActionStateRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict[str, bool]:
+    await run_in_threadpool(save_action_state, action_id, req.state, req.metric_snapshot, current_user.id)
     return {"success": True}
 
 
 @app.post("/api/performance", response_model=PerformanceRecord)
-async def api_create_performance(req: PerformanceInput) -> PerformanceRecord:
+async def api_create_performance(
+    req: PerformanceInput,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> PerformanceRecord:
     data = req.model_dump()
     data["platform"] = req.platform.value
-    return await run_in_threadpool(save_performance, PerformanceRecord(**data))
+    asset = await run_in_threadpool(get_content_asset, req.asset_id, current_user.id)
+    if not asset:
+        raise HTTPException(status_code=404, detail="内容资产不存在")
+    return await run_in_threadpool(save_performance, PerformanceRecord(**data), current_user.id)
 
 
 @app.get("/api/platform-connectors")
-async def api_list_platform_connectors(settings: Settings = Depends(get_settings)) -> list[dict[str, str | bool]]:
+async def api_list_platform_connectors(
+    settings: Settings = Depends(get_settings),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> list[dict[str, str | bool]]:
     try:
         return list_connector_status(settings)
     except ValueError as exc:
@@ -618,11 +681,15 @@ async def api_list_platform_connectors(settings: Settings = Depends(get_settings
 
 
 @app.post("/api/platform-connectors/{platform}/sync")
-async def api_sync_platform_connector(platform: Platform, settings: Settings = Depends(get_settings)) -> dict[str, object]:
+async def api_sync_platform_connector(
+    platform: Platform,
+    settings: Settings = Depends(get_settings),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict[str, object]:
     if platform not in SUPPORTED_PLATFORMS:
         raise HTTPException(status_code=422, detail=f"平台 {platform.value} 不支持效果数据连接器")
     try:
-        return await sync_platform_performance(platform, settings)
+        return await sync_platform_performance(platform, settings, owner_id=current_user.id)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -632,17 +699,23 @@ class PerformanceCsvInput(BaseModel):
 
 
 @app.post("/api/performance/import/preview")
-async def api_preview_performance_csv(req: PerformanceCsvInput) -> dict[str, object]:
+async def api_preview_performance_csv(
+    req: PerformanceCsvInput,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict[str, object]:
     try:
-        return await run_in_threadpool(preview_performance_csv, req.csv_text)
+        return await run_in_threadpool(preview_performance_csv, req.csv_text, current_user.id)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.post("/api/performance/import")
-async def api_import_performance_csv(req: PerformanceCsvInput) -> dict[str, object]:
+async def api_import_performance_csv(
+    req: PerformanceCsvInput,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict[str, object]:
     try:
-        return await run_in_threadpool(import_performance_csv, req.csv_text)
+        return await run_in_threadpool(import_performance_csv, req.csv_text, current_user.id)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -660,20 +733,20 @@ class SessionInput(BaseModel):
 
 
 @app.get("/api/sessions", response_model=list[StoredSession])
-async def api_list_sessions() -> list[StoredSession]:
-    return await run_in_threadpool(list_sessions)
+async def api_list_sessions(current_user: CurrentUser = Depends(get_current_user)) -> list[StoredSession]:
+    return await run_in_threadpool(list_sessions, current_user.id)
 
 
 @app.get("/api/sessions/{session_id}", response_model=StoredSession)
-async def api_get_session(session_id: str) -> StoredSession:
-    session = await run_in_threadpool(get_session, session_id)
+async def api_get_session(session_id: str, current_user: CurrentUser = Depends(get_current_user)) -> StoredSession:
+    session = await run_in_threadpool(get_session, session_id, current_user.id)
     if not session:
         raise HTTPException(status_code=404, detail="会话不存在")
     return session
 
 
 @app.post("/api/sessions", response_model=StoredSession)
-async def api_save_session(req: SessionInput) -> StoredSession:
+async def api_save_session(req: SessionInput, current_user: CurrentUser = Depends(get_current_user)) -> StoredSession:
     session = StoredSession(
         id=req.id, platform=req.platform.value, title=req.title,
         product_id=req.product_id if req.product_binding_confirmed else None,
@@ -681,13 +754,16 @@ async def api_save_session(req: SessionInput) -> StoredSession:
         messages=req.messages,
         studio=req.studio,
     )
-    await run_in_threadpool(save_session, session)
+    try:
+        await run_in_threadpool(save_session, session, current_user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return session
 
 
 @app.delete("/api/sessions/{session_id}")
-async def api_delete_session(session_id: str) -> dict[str, bool]:
-    return {"deleted": await run_in_threadpool(delete_session, session_id)}
+async def api_delete_session(session_id: str, current_user: CurrentUser = Depends(get_current_user)) -> dict[str, bool]:
+    return {"deleted": await run_in_threadpool(delete_session, session_id, current_user.id)}
 
 
 # --- Vision / Design ---
@@ -712,7 +788,11 @@ class ImageGenerateResponse(BaseModel):
 
 
 @app.post("/api/vision/analyze", response_model=ImageAnalyzeResponse)
-async def api_analyze_image(req: ImageAnalyzeInput, settings: Settings = Depends(get_settings)) -> ImageAnalyzeResponse:
+async def api_analyze_image(
+    req: ImageAnalyzeInput,
+    settings: Settings = Depends(get_settings),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ImageAnalyzeResponse:
     if not settings.dashscope_api_key:
         raise HTTPException(status_code=503, detail="未配置 DashScope API Key")
     try:
@@ -724,7 +804,11 @@ async def api_analyze_image(req: ImageAnalyzeInput, settings: Settings = Depends
 
 
 @app.post("/api/vision/generate", response_model=ImageGenerateResponse)
-async def api_generate_image(req: ImageGenerateInput, settings: Settings = Depends(get_settings)) -> ImageGenerateResponse:
+async def api_generate_image(
+    req: ImageGenerateInput,
+    settings: Settings = Depends(get_settings),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ImageGenerateResponse:
     if not settings.dashscope_api_key:
         raise HTTPException(status_code=503, detail="未配置 DashScope API Key")
     try:
@@ -737,7 +821,11 @@ async def api_generate_image(req: ImageGenerateInput, settings: Settings = Depen
 
 
 @app.get("/api/vision/generate/{task_id}")
-async def api_poll_image(task_id: str, settings: Settings = Depends(get_settings)) -> dict:
+async def api_poll_image(
+    task_id: str,
+    settings: Settings = Depends(get_settings),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
     if not settings.dashscope_api_key:
         raise HTTPException(status_code=503, detail="未配置 DashScope API Key")
     try:
@@ -753,7 +841,7 @@ async def api_poll_image(task_id: str, settings: Settings = Depends(get_settings
 # --- Studio ---
 
 @app.get("/api/studio/templates")
-async def api_studio_templates() -> dict:
+async def api_studio_templates(current_user: CurrentUser = Depends(get_current_user)) -> dict:
     from app.design_image_prompts import ALL_TEMPLATES, TEMPLATES_BY_CATEGORY, PLATFORM_SIZES
     templates = [{"id": t.id, "name": t.name, "description": t.description, "aspect_ratio": t.aspect_ratio, "tags": t.tags, "prompt_template": t.prompt_template, "builtin": True} for t in ALL_TEMPLATES]
     categories = {k: {"name": v["name"], "template_ids": [t.id for t in v["templates"]]} for k, v in TEMPLATES_BY_CATEGORY.items()}
@@ -795,7 +883,10 @@ class CustomTemplateInput(BaseModel):
 
 
 @app.post("/api/studio/templates/custom")
-async def api_create_custom_template(body: CustomTemplateInput) -> dict:
+async def api_create_custom_template(
+    body: CustomTemplateInput,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
     custom = _load_custom_templates()
     tid = f"custom-{uuid.uuid4().hex[:8]}"
     new_tpl = {
@@ -810,7 +901,10 @@ async def api_create_custom_template(body: CustomTemplateInput) -> dict:
 
 
 @app.delete("/api/studio/templates/custom/{template_id}")
-async def api_delete_custom_template(template_id: str) -> dict:
+async def api_delete_custom_template(
+    template_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
     custom = _load_custom_templates()
     before = len(custom)
     custom = [t for t in custom if t.get("id") != template_id]
@@ -834,7 +928,11 @@ class StudioSceneInput(BaseModel):
 
 
 @app.post("/api/studio/generate-product")
-async def api_studio_product(req: StudioProductInput, settings: Settings = Depends(get_settings)) -> dict:
+async def api_studio_product(
+    req: StudioProductInput,
+    settings: Settings = Depends(get_settings),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
     if not settings.dashscope_api_key: raise HTTPException(status_code=503, detail="未配置 DashScope API Key")
     if not req.base_desc.strip() and not req.image_b64:
         raise HTTPException(status_code=422, detail="产品描述和图片至少提供一项")
@@ -847,7 +945,11 @@ async def api_studio_product(req: StudioProductInput, settings: Settings = Depen
 
 
 @app.post("/api/studio/adjust-product")
-async def api_studio_adjust(req: StudioAdjustInput, settings: Settings = Depends(get_settings)) -> dict:
+async def api_studio_adjust(
+    req: StudioAdjustInput,
+    settings: Settings = Depends(get_settings),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
     if not settings.dashscope_api_key: raise HTTPException(status_code=503, detail="未配置 DashScope API Key")
     try:
         from app.studio import submit_adjust
@@ -858,7 +960,11 @@ async def api_studio_adjust(req: StudioAdjustInput, settings: Settings = Depends
 
 
 @app.post("/api/studio/generate-scene")
-async def api_studio_scene(req: StudioSceneInput, settings: Settings = Depends(get_settings)) -> dict:
+async def api_studio_scene(
+    req: StudioSceneInput,
+    settings: Settings = Depends(get_settings),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
     if not settings.dashscope_api_key: raise HTTPException(status_code=503, detail="未配置 DashScope API Key")
     try:
         from app.studio import submit_scene
@@ -869,7 +975,11 @@ async def api_studio_scene(req: StudioSceneInput, settings: Settings = Depends(g
 
 
 @app.post("/api/studio/tweak-scene")
-async def api_studio_tweak(req: StudioSceneInput, settings: Settings = Depends(get_settings)) -> dict:
+async def api_studio_tweak(
+    req: StudioSceneInput,
+    settings: Settings = Depends(get_settings),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
     if not settings.dashscope_api_key: raise HTTPException(status_code=503, detail="未配置 DashScope API Key")
     try:
         from app.studio import submit_tweak
@@ -880,7 +990,11 @@ async def api_studio_tweak(req: StudioSceneInput, settings: Settings = Depends(g
 
 
 @app.get("/api/studio/poll/{task_id}")
-async def api_studio_poll(task_id: str, settings: Settings = Depends(get_settings)) -> dict:
+async def api_studio_poll(
+    task_id: str,
+    settings: Settings = Depends(get_settings),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
     if not settings.dashscope_api_key: raise HTTPException(status_code=503, detail="未配置 DashScope API Key")
     try:
         from app.studio import poll_task

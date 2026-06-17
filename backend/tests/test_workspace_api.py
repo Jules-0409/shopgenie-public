@@ -12,6 +12,12 @@ from app.workspace import create_content_asset
 
 def test_workspace_api_flow(tmp_path: Path) -> None:
     memory.DB_PATH = tmp_path / "workspace.db"
+    asset = create_content_asset(GeneratedContent(
+        platform=Platform.XHS,
+        title="测试内容",
+        body="完整正文" * 30,
+        tags=["测试", "内容", "运营"],
+    ))[0]
     with TestClient(app) as client:
         product = client.post("/api/products", json={
             "name": "轻量保温杯",
@@ -25,7 +31,7 @@ def test_workspace_api_flow(tmp_path: Path) -> None:
             "content": "避免硬广表达",
         })
         performance = client.post("/api/performance", json={
-            "asset_id": "content_demo",
+            "asset_id": asset.id,
             "platform": "xhs",
             "impressions": 1200,
             "conversions": 8,
@@ -242,7 +248,7 @@ def test_chat_discovers_sources_for_explicit_research_request(tmp_path: Path, mo
     memory.DB_PATH = tmp_path / "workspace.db"
     discovered: list[str] = []
 
-    async def fake_discover(query: str, platform: Platform) -> list:
+    async def fake_discover(query: str, platform: Platform, owner_id: str = "default") -> list:
         discovered.append(f"{platform.value}:{query}")
         return []
 

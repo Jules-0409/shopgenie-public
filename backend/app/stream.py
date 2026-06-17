@@ -7,6 +7,7 @@ from fastapi import Depends
 from starlette.responses import StreamingResponse
 
 from app.config import Settings, get_settings
+from app.auth import DEFAULT_OWNER_ID
 from app.deepseek import DeepSeekClient, DeepSeekError
 from app.memory import get_profile
 from app.postprocess import post_process
@@ -27,6 +28,7 @@ def sse_event(event: str, data: dict | str) -> str:
 async def chat_stream_generator(
     request: ChatRequest,
     settings: Settings,
+    owner_id: str = DEFAULT_OWNER_ID,
 ) -> AsyncGenerator[str, None]:
     """Generate SSE events for a chat request."""
     from starlette.concurrency import run_in_threadpool
@@ -52,14 +54,14 @@ async def chat_stream_generator(
         # Step 1: Loading context
         yield sse_event("status", {"step": "loading", "message": "正在加载上下文..."})
 
-        profile = await run_in_threadpool(get_profile)
-        product = await run_in_threadpool(get_product, request.product_id) if request.product_id else None
+        profile = await run_in_threadpool(get_profile, owner_id)
+        product = await run_in_threadpool(get_product, request.product_id, owner_id) if request.product_id else None
         if request.product_id and not product:
             yield sse_event("error", {"message": "当前会话绑定的商品不存在，请重新选择商品后新建会话"})
             yield sse_event("done", {"status": "error"})
             return
         if product:
-            product = await run_in_threadpool(learn_product_from_message, product, request.message)
+            product = await run_in_threadpool(learn_product_from_message, product, request.message, owner_id)
 
         # Step 2: Image analysis (if provided)
         image_context = ""
@@ -84,7 +86,7 @@ async def chat_stream_generator(
             try:
                 from app.web_search import discover_knowledge
                 import httpx
-                await discover_knowledge(request.message, request.platform)
+                await discover_knowledge(request.message, request.platform, owner_id)
             except (httpx.HTTPError, ValueError) as exc:
                 logger.warning("Knowledge discovery failed: %s", exc)
 
@@ -92,7 +94,7 @@ async def chat_stream_generator(
         yield sse_event("status", {"step": "generating", "message": "正在生成内容..."})
         yield sse_event("status", {"step": "streaming", "message": "模型输出中..."})
 
-        client = DeepSeekClient(settings, profile=profile, product=product)
+        client = DeepSeekClient(settings, profile=profile, product=product, owner_id=owner_id)
         full_content = ""
         async for token in client.chat_stream(request, extra_context=image_context):
             full_content += token
@@ -122,24 +124,24 @@ async def chat_stream_generator(
 
         # Step 7: Save to workspace
         from app.workspace import create_agent_task, complete_agent_task, create_content_asset
-        task = await run_in_threadpool(create_agent_task, request.message)
+        task = await run_in_threadpool(create_agent_task, request.message, owner_id)
         asset_id = None
         quality = None
         if result is not None:
             asset, version = await run_in_threadpool(
-                create_content_asset, result, request.product_id, warnings,
+                create_content_asset, result, request.product_id, warnings, "AI 初稿", owner_id,
             )
             asset_id = asset.id
             quality = version.quality
-            await run_in_threadpool(complete_agent_task, task, f"已生成内容并保存为 {asset.name}")
+            await run_in_threadpool(complete_agent_task, task, f"已生成内容并保存为 {asset.name}", owner_id)
         else:
-            await run_in_threadpool(complete_agent_task, task, message[:200])
+            await run_in_threadpool(complete_agent_task, task, message[:200], owner_id)
 
         # Step 8: Final result
         from app.workspace_context import retrieve_knowledge
         sources = [
             {"id": source.id, "title": source.title, "url": source.url}
-            for source in retrieve_knowledge(request.platform, request.message)
+            for source in retrieve_knowledge(request.platform, request.message, owner_id=owner_id)
         ]
         response_data = {
             "message": message,

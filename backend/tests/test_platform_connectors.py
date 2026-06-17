@@ -62,7 +62,7 @@ async def test_platform_sync_rejects_invalid_batch_without_writing(tmp_path: Pat
 
 def test_connector_api_reports_configuration_and_syncs_explicitly(tmp_path: Path, monkeypatch) -> None:
     memory.DB_PATH = tmp_path / "workspace.db"
-    async def fake_sync(platform: Platform, settings: Settings) -> dict[str, object]:
+    async def fake_sync(platform: Platform, settings: Settings, owner_id: str = "default") -> dict[str, object]:
         return {"platform": platform.value, "imported": 2, "records": []}
 
     monkeypatch.setattr("app.main.sync_platform_performance", fake_sync)

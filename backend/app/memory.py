@@ -4,6 +4,8 @@ import sqlite3
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from app.auth import DEFAULT_OWNER_ID, normalize_user_id
+
 DB_PATH = Path(__file__).resolve().parent / "shopgenie.db"
 
 
@@ -37,6 +39,7 @@ def _get_connection() -> sqlite3.Connection:
 
 def get_profile(profile_id: str = "default") -> UserProfile | None:
     """获取用户档案"""
+    profile_id = normalize_user_id(profile_id)
     conn = _get_connection()
     try:
         row = conn.execute("SELECT data FROM user_profile WHERE id = ?", (profile_id,)).fetchone()
@@ -50,6 +53,7 @@ def get_profile(profile_id: str = "default") -> UserProfile | None:
 
 def save_profile(profile: UserProfile) -> None:
     """保存用户档案"""
+    profile.id = normalize_user_id(profile.id)
     conn = _get_connection()
     try:
         data = json.dumps(asdict(profile), ensure_ascii=False)
@@ -65,6 +69,7 @@ def save_profile(profile: UserProfile) -> None:
 
 def delete_profile(profile_id: str = "default") -> bool:
     """删除用户档案"""
+    profile_id = normalize_user_id(profile_id or DEFAULT_OWNER_ID)
     conn = _get_connection()
     try:
         cursor = conn.execute("DELETE FROM user_profile WHERE id = ?", (profile_id,))

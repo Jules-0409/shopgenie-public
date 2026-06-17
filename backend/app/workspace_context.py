@@ -2,6 +2,7 @@
 import re
 
 from app.schemas import Platform
+from app.auth import DEFAULT_OWNER_ID
 from app.workspace import (
     KnowledgeSource,
     Product,
@@ -61,7 +62,7 @@ def build_review_prompt(product: Product | None) -> str:
     return header + "\n" + "\n".join(lines)
 
 
-def learn_product_from_message(product: Product, message: str) -> Product:
+def learn_product_from_message(product: Product, message: str, owner_id: str = DEFAULT_OWNER_ID) -> Product:
     """仅提取用户显式标注的事实，避免把普通对话误记为商品真相。"""
     mappings = {
         "事实：": "facts", "事实:": "facts",
@@ -80,11 +81,11 @@ def learn_product_from_message(product: Product, message: str) -> Product:
                 if value not in current:
                     current.append(value)
                     changed = True
-    return save_product(product) if changed else product
+    return save_product(product, owner_id) if changed else product
 
 
-def retrieve_knowledge(platform: Platform, query: str, limit: int = 5) -> list[KnowledgeSource]:
-    sources = list_knowledge_sources(platform.value)
+def retrieve_knowledge(platform: Platform, query: str, limit: int = 5, owner_id: str = DEFAULT_OWNER_ID) -> list[KnowledgeSource]:
+    sources = list_knowledge_sources(platform.value, owner_id)
     terms = {term.lower() for term in re.findall(r"[\w\u4e00-\u9fff]{2,}", query)}
     scored = []
     for source in sources:
@@ -95,21 +96,21 @@ def retrieve_knowledge(platform: Platform, query: str, limit: int = 5) -> list[K
     return [source for _, _, source in scored[:limit]]
 
 
-def build_knowledge_prompt(platform: Platform, query: str = "") -> str:
-    sources = retrieve_knowledge(platform, query)
+def build_knowledge_prompt(platform: Platform, query: str = "", owner_id: str = DEFAULT_OWNER_ID) -> str:
+    sources = retrieve_knowledge(platform, query, owner_id=owner_id)
     if not sources:
         return ""
     excerpts = [f"- [{source.id}] {source.title}：{source.content[:500]}" for source in sources]
     return "【已验证知识来源】\n仅把以下资料作为运营规则参考，不要把它们当成商品事实。回答建议时引用来源编号。\n" + "\n".join(excerpts)
 
 
-def build_performance_prompt(product_id: str | None, platform: Platform) -> str:
+def build_performance_prompt(product_id: str | None, platform: Platform, owner_id: str = DEFAULT_OWNER_ID) -> str:
     if not product_id:
         return ""
-    assets = [asset for asset in list_content_assets() if asset.product_id == product_id and asset.platform == platform.value]
+    assets = [asset for asset in list_content_assets(owner_id) if asset.product_id == product_id and asset.platform == platform.value]
     rows = []
     for asset in assets:
-        for record in list_performance(asset.id):
+        for record in list_performance(asset.id, owner_id):
             rate = round(record.conversions / record.impressions * 100, 2) if record.impressions else 0
             rows.append((rate, record.impressions, asset.name, record))
     if not rows:
@@ -122,12 +123,12 @@ def build_performance_prompt(product_id: str | None, platform: Platform) -> str:
     return "【历史发布效果】\n参考历史高表现内容的表达策略，但不要编造原因或承诺相同效果。\n" + "\n".join(lines)
 
 
-def build_experiment_prompt(product_id: str | None, platform: Platform) -> str:
+def build_experiment_prompt(product_id: str | None, platform: Platform, owner_id: str = DEFAULT_OWNER_ID) -> str:
     """把已分胜负的 A/B 实验赢家（标题/钩子风格）反哺给生成。"""
     if not product_id:
         return ""
     winners = []
-    for exp in list_experiments(product_id):
+    for exp in list_experiments(product_id, owner_id):
         if exp.platform != platform.value or exp.status != "decided" or not exp.winner_label:
             continue
         win = next((v for v in exp.variants if v.get("label") == exp.winner_label), None)
@@ -148,12 +149,12 @@ def build_experiment_prompt(product_id: str | None, platform: Platform) -> str:
             "新内容请延续它们的钩子结构和表达风格，但不要照抄文字。\n" + "\n".join(lines))
 
 
-def build_content_history_prompt(product_id: str | None, platform: Platform) -> str:
+def build_content_history_prompt(product_id: str | None, platform: Platform, owner_id: str = DEFAULT_OWNER_ID) -> str:
     """Inject existing content assets (latest versions) as reference context."""
     if not product_id:
         return ""
     assets = [
-        asset for asset in list_content_assets()
+        asset for asset in list_content_assets(owner_id)
         if asset.product_id == product_id and asset.platform == platform.value
     ]
     if not assets:
@@ -161,7 +162,7 @@ def build_content_history_prompt(product_id: str | None, platform: Platform) -> 
 
     excerpts = []
     for asset in assets[:3]:  # Max 3 assets to avoid token bloat
-        version = get_current_version(asset.id)
+        version = get_current_version(asset.id, owner_id)
         if not version:
             continue
         content = version.content

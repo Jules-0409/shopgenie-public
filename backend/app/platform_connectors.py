@@ -9,6 +9,7 @@ from urllib.parse import urljoin, urlparse
 
 import httpx
 
+from app.auth import DEFAULT_OWNER_ID
 from app.config import Settings
 from app.schemas import Platform
 from app.workspace import PerformanceRecord, get_content_asset, save_performance_batch
@@ -65,7 +66,7 @@ def _non_negative_number(record: dict[str, Any], field: str, *, integer: bool) -
     return number
 
 
-def _normalize_records(platform: Platform, payload: object) -> list[PerformanceRecord]:
+def _normalize_records(platform: Platform, payload: object, owner_id: str = DEFAULT_OWNER_ID) -> list[PerformanceRecord]:
     raw_records = payload.get("records") if isinstance(payload, dict) else payload
     if not isinstance(raw_records, list):
         raise ValueError("平台 API 响应必须是 records 数组")
@@ -82,7 +83,7 @@ def _normalize_records(platform: Platform, payload: object) -> list[PerformanceR
         asset_id = str(raw.get("asset_id", "")).strip()
         if not remote_id or not asset_id:
             raise ValueError(f"第 {index} 条平台数据缺少 record_id 或 asset_id")
-        asset = get_content_asset(asset_id)
+        asset = get_content_asset(asset_id, owner_id)
         if not asset:
             raise ValueError(f"第 {index} 条平台数据绑定的内容资产 {asset_id} 不存在")
         if asset.platform != platform.value:
@@ -102,7 +103,7 @@ def _normalize_records(platform: Platform, payload: object) -> list[PerformanceR
             datetime.fromisoformat(recorded_at)
         except ValueError as exc:
             raise ValueError(f"第 {index} 条平台数据 recorded_at 不是合法 ISO 时间") from exc
-        stable_id = hashlib.sha256(f"{platform.value}:{remote_id}".encode()).hexdigest()[:20]
+        stable_id = hashlib.sha256(f"{owner_id}:{platform.value}:{remote_id}".encode()).hexdigest()[:20]
         records.append(PerformanceRecord(
             id=f"metric_sync_{stable_id}",
             asset_id=asset_id,
@@ -119,6 +120,7 @@ async def sync_platform_performance(
     platform: Platform,
     settings: Settings,
     client: httpx.AsyncClient | None = None,
+    owner_id: str = DEFAULT_OWNER_ID,
 ) -> dict[str, object]:
     if platform not in SUPPORTED_PLATFORMS:
         raise ValueError(f"平台 {platform.value} 不支持效果数据连接器")
@@ -132,7 +134,7 @@ async def sync_platform_performance(
     try:
         response = await http.get(url, headers=headers, params={"limit": MAX_SYNC_RECORDS})
         response.raise_for_status()
-        records = await asyncio.to_thread(_normalize_records, platform, response.json())
+        records = await asyncio.to_thread(_normalize_records, platform, response.json(), owner_id)
     except httpx.HTTPStatusError as exc:
         raise ValueError(f"{platform.value} 平台 API 返回错误状态 {exc.response.status_code}") from exc
     except (httpx.HTTPError, json.JSONDecodeError) as exc:
@@ -140,5 +142,5 @@ async def sync_platform_performance(
     finally:
         if owns_client:
             await http.aclose()
-    await asyncio.to_thread(save_performance_batch, records)
+    await asyncio.to_thread(save_performance_batch, records, owner_id)
     return {"platform": platform.value, "imported": len(records), "records": [asdict(record) for record in records[:5]]}

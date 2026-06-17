@@ -5,6 +5,7 @@ from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 import httpx
 from starlette.concurrency import run_in_threadpool
 
+from app.auth import DEFAULT_OWNER_ID
 from app.schemas import Platform
 from app.workspace import KnowledgeSource, save_knowledge_source
 
@@ -127,7 +128,7 @@ def evaluate_credibility(url: str, platform_value: str) -> str:
     return "【第三方网页】"
 
 
-async def discover_knowledge(query: str, platform: Platform) -> list[KnowledgeSource]:
+async def discover_knowledge(query: str, platform: Platform, owner_id: str = DEFAULT_OWNER_ID) -> list[KnowledgeSource]:
     results = await search_public_web(query)
     sources = []
     for title, url, snippet in results:
@@ -139,5 +140,5 @@ async def discover_knowledge(query: str, platform: Platform) -> list[KnowledgeSo
             content=snippet or f"公开网页候选：{title}",
             url=url,
         )
-        sources.append(await run_in_threadpool(save_knowledge_source, source))
+        sources.append(await run_in_threadpool(save_knowledge_source, source, owner_id))
     return sources

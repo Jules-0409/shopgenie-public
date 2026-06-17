@@ -2,6 +2,7 @@
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 
+from app.auth import DEFAULT_OWNER_ID
 from app.workspace import (
     ContentAsset,
     Experiment,
@@ -247,12 +248,12 @@ def _experiment_action(experiments: list[Experiment]) -> OperationsAction | None
     )
 
 
-def build_operations_brief() -> dict[str, object]:
-    products = list_products()
-    assets = list_content_assets()
-    records = list_performance()
-    experiments = list_experiments()
-    action_states = get_action_states()
+def build_operations_brief(owner_id: str = DEFAULT_OWNER_ID) -> dict[str, object]:
+    products = list_products(owner_id)
+    assets = list_content_assets(owner_id)
+    records = list_performance(owner_id=owner_id)
+    experiments = list_experiments(owner_id=owner_id)
+    action_states = get_action_states(owner_id)
     
     raw_actions: list[OperationsAction] = []
 

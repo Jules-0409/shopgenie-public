@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     deepseek_timeout_seconds: float = Field(default=30, gt=0, le=120)
     dashscope_api_key: str = Field(default="")
     platform_api_connectors_json: str = Field(default="{}")
+    shopgenie_auth_tokens_json: str = Field(default="")
 
 
 @lru_cache

@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+from app.auth import DEFAULT_OWNER_ID
 from app import memory
 from app.postprocess import post_process
 from app.schemas import ContentType, GeneratedContent, Platform
@@ -130,86 +131,108 @@ def _connect() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS products (
-            id TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT NOT NULL
+            id TEXT PRIMARY KEY, owner_id TEXT NOT NULL DEFAULT 'default', data TEXT NOT NULL, updated_at TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS content_assets (
-            id TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT NOT NULL
+            id TEXT PRIMARY KEY, owner_id TEXT NOT NULL DEFAULT 'default', data TEXT NOT NULL, updated_at TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS content_versions (
-            id TEXT PRIMARY KEY, asset_id TEXT NOT NULL, version INTEGER NOT NULL,
+            id TEXT PRIMARY KEY, owner_id TEXT NOT NULL DEFAULT 'default', asset_id TEXT NOT NULL, version INTEGER NOT NULL,
             data TEXT NOT NULL, created_at TEXT NOT NULL,
             UNIQUE(asset_id, version)
         );
         CREATE TABLE IF NOT EXISTS knowledge_sources (
-            id TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT NOT NULL
+            id TEXT PRIMARY KEY, owner_id TEXT NOT NULL DEFAULT 'default', data TEXT NOT NULL, updated_at TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS agent_tasks (
-            id TEXT PRIMARY KEY, data TEXT NOT NULL, created_at TEXT NOT NULL
+            id TEXT PRIMARY KEY, owner_id TEXT NOT NULL DEFAULT 'default', data TEXT NOT NULL, created_at TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS performance_records (
-            id TEXT PRIMARY KEY, asset_id TEXT NOT NULL, data TEXT NOT NULL, recorded_at TEXT NOT NULL
+            id TEXT PRIMARY KEY, owner_id TEXT NOT NULL DEFAULT 'default', asset_id TEXT NOT NULL, data TEXT NOT NULL, recorded_at TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS experiments (
-            id TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT NOT NULL
+            id TEXT PRIMARY KEY, owner_id TEXT NOT NULL DEFAULT 'default', data TEXT NOT NULL, updated_at TEXT NOT NULL
         );
         CREATE TABLE IF NOT EXISTS operations_actions (
-            id TEXT PRIMARY KEY, state TEXT NOT NULL, last_updated_at TEXT NOT NULL, metric_snapshot TEXT
+            id TEXT PRIMARY KEY, owner_id TEXT NOT NULL DEFAULT 'default', state TEXT NOT NULL, last_updated_at TEXT NOT NULL, metric_snapshot TEXT
         );
+    """)
+    for table in (
+        "products", "content_assets", "content_versions", "knowledge_sources",
+        "agent_tasks", "performance_records", "experiments", "operations_actions",
+    ):
+        try:
+            conn.execute(f"SELECT owner_id FROM {table} LIMIT 0")
+        except sqlite3.OperationalError:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN owner_id TEXT NOT NULL DEFAULT 'default'")
+        conn.execute(f"UPDATE {table} SET owner_id = ? WHERE owner_id IS NULL OR owner_id = ''", (DEFAULT_OWNER_ID,))
+    conn.executescript("""
+        CREATE INDEX IF NOT EXISTS idx_products_owner_updated ON products(owner_id, updated_at);
+        CREATE INDEX IF NOT EXISTS idx_content_assets_owner_updated ON content_assets(owner_id, updated_at);
+        CREATE INDEX IF NOT EXISTS idx_content_versions_owner_asset ON content_versions(owner_id, asset_id, version);
+        CREATE INDEX IF NOT EXISTS idx_knowledge_sources_owner_updated ON knowledge_sources(owner_id, updated_at);
+        CREATE INDEX IF NOT EXISTS idx_agent_tasks_owner_created ON agent_tasks(owner_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_performance_records_owner_recorded ON performance_records(owner_id, recorded_at);
+        CREATE INDEX IF NOT EXISTS idx_experiments_owner_updated ON experiments(owner_id, updated_at);
+        CREATE INDEX IF NOT EXISTS idx_operations_actions_owner ON operations_actions(owner_id);
     """)
     conn.commit()
     return conn
 
 
-def _upsert(table: str, item_id: str, data: dict, timestamp_field: str = "updated_at") -> None:
+def _upsert(table: str, item_id: str, data: dict, timestamp_field: str = "updated_at", owner_id: str = DEFAULT_OWNER_ID) -> None:
     conn = _connect()
     try:
         stamp = str(data[timestamp_field])
+        existing = conn.execute(f"SELECT owner_id FROM {table} WHERE id = ?", (item_id,)).fetchone()
+        if existing and existing["owner_id"] != owner_id:
+            raise ValueError(f"{item_id} 不属于当前用户")
         conn.execute(
-            f"INSERT INTO {table} (id, data, {timestamp_field}) VALUES (?, ?, ?) "
+            f"INSERT INTO {table} (id, owner_id, data, {timestamp_field}) VALUES (?, ?, ?, ?) "
             f"ON CONFLICT(id) DO UPDATE SET data = excluded.data, {timestamp_field} = excluded.{timestamp_field}",
-            (item_id, json.dumps(data, ensure_ascii=False), stamp),
+            (item_id, owner_id, json.dumps(data, ensure_ascii=False), stamp),
         )
         conn.commit()
     finally:
         conn.close()
 
 
-def _list(table: str, cls: type, order_field: str = "updated_at") -> list:
+def _list(table: str, cls: type, order_field: str = "updated_at", owner_id: str = DEFAULT_OWNER_ID) -> list:
     conn = _connect()
     try:
-        rows = conn.execute(f"SELECT data FROM {table} ORDER BY {order_field} DESC").fetchall()
+        rows = conn.execute(f"SELECT data FROM {table} WHERE owner_id = ? ORDER BY {order_field} DESC", (owner_id,)).fetchall()
         return [cls(**json.loads(row["data"])) for row in rows]
     finally:
         conn.close()
 
 
-def _get(table: str, item_id: str, cls: type):
+def _get(table: str, item_id: str, cls: type, owner_id: str = DEFAULT_OWNER_ID):
     conn = _connect()
     try:
-        row = conn.execute(f"SELECT data FROM {table} WHERE id = ?", (item_id,)).fetchone()
+        row = conn.execute(f"SELECT data FROM {table} WHERE id = ? AND owner_id = ?", (item_id, owner_id)).fetchone()
         return cls(**json.loads(row["data"])) if row else None
     finally:
         conn.close()
 
 
-def save_product(product: Product) -> Product:
+def save_product(product: Product, owner_id: str = DEFAULT_OWNER_ID) -> Product:
     product.updated_at = _now()
-    _upsert("products", product.id, asdict(product))
+    _upsert("products", product.id, asdict(product), owner_id=owner_id)
     return product
 
 
-def list_products() -> list[Product]:
-    return _list("products", Product)
+def list_products(owner_id: str = DEFAULT_OWNER_ID) -> list[Product]:
+    return _list("products", Product, owner_id=owner_id)
 
 
-def get_product(product_id: str) -> Product | None:
-    return _get("products", product_id, Product)
+def get_product(product_id: str, owner_id: str = DEFAULT_OWNER_ID) -> Product | None:
+    return _get("products", product_id, Product, owner_id=owner_id)
 
 
-def delete_product(product_id: str) -> bool:
+def delete_product(product_id: str, owner_id: str = DEFAULT_OWNER_ID) -> bool:
     conn = _connect()
     try:
-        cursor = conn.execute("DELETE FROM products WHERE id = ?", (product_id,))
+        cursor = conn.execute("DELETE FROM products WHERE id = ? AND owner_id = ?", (product_id, owner_id))
         conn.commit()
         return cursor.rowcount > 0
     finally:
@@ -256,96 +279,103 @@ def create_content_asset(
     product_id: str | None = None,
     warnings: list[str] | None = None,
     change_note: str = "AI 初稿",
+    owner_id: str = DEFAULT_OWNER_ID,
 ) -> tuple[ContentAsset, ContentVersion]:
-    product = get_product(product_id) if product_id else None
+    product = get_product(product_id, owner_id) if product_id else None
     quality = evaluate_quality(content, product, warnings)
     asset = ContentAsset(product_id=product_id, platform=content.platform.value, name=content.title)
-    _upsert("content_assets", asset.id, asdict(asset))
+    _upsert("content_assets", asset.id, asdict(asset), owner_id=owner_id)
     version = ContentVersion(asset_id=asset.id, content=content.model_dump(mode="json"), quality=asdict(quality), change_note=change_note)
-    _save_version(version)
+    _save_version(version, owner_id)
     return asset, version
 
 
-def _save_version(version: ContentVersion) -> None:
+def _save_version(version: ContentVersion, owner_id: str = DEFAULT_OWNER_ID) -> None:
     conn = _connect()
     try:
+        existing = conn.execute("SELECT owner_id FROM content_versions WHERE id = ?", (version.id,)).fetchone()
+        if existing and existing["owner_id"] != owner_id:
+            raise ValueError("内容版本不属于当前用户")
         conn.execute(
-            "INSERT INTO content_versions (id, asset_id, version, data, created_at) VALUES (?, ?, ?, ?, ?)",
-            (version.id, version.asset_id, version.version, json.dumps(asdict(version), ensure_ascii=False), version.created_at),
+            "INSERT INTO content_versions (id, owner_id, asset_id, version, data, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (version.id, owner_id, version.asset_id, version.version, json.dumps(asdict(version), ensure_ascii=False), version.created_at),
         )
         conn.commit()
     finally:
         conn.close()
 
 
-def add_content_version(asset_id: str, content: GeneratedContent, change_note: str) -> ContentVersion:
-    asset = get_content_asset(asset_id)
+def add_content_version(asset_id: str, content: GeneratedContent, change_note: str, owner_id: str = DEFAULT_OWNER_ID) -> ContentVersion:
+    asset = get_content_asset(asset_id, owner_id)
     if not asset:
         raise ValueError("内容资产不存在")
-    product = get_product(asset.product_id) if asset.product_id else None
+    product = get_product(asset.product_id, owner_id) if asset.product_id else None
     next_version = asset.current_version + 1
     quality = evaluate_quality(content, product, post_process(content).warnings)
     version = ContentVersion(asset_id=asset_id, version=next_version, content=content.model_dump(mode="json"), quality=asdict(quality), change_note=change_note)
-    _save_version(version)
+    _save_version(version, owner_id)
     asset.current_version = next_version
     asset.name = content.title
     asset.updated_at = _now()
-    _upsert("content_assets", asset.id, asdict(asset))
+    _upsert("content_assets", asset.id, asdict(asset), owner_id=owner_id)
     return version
 
 
-def list_content_assets() -> list[ContentAsset]:
-    return _list("content_assets", ContentAsset)
+def list_content_assets(owner_id: str = DEFAULT_OWNER_ID) -> list[ContentAsset]:
+    return _list("content_assets", ContentAsset, owner_id=owner_id)
 
 
-def get_content_asset(asset_id: str) -> ContentAsset | None:
-    return _get("content_assets", asset_id, ContentAsset)
+def get_content_asset(asset_id: str, owner_id: str = DEFAULT_OWNER_ID) -> ContentAsset | None:
+    return _get("content_assets", asset_id, ContentAsset, owner_id=owner_id)
 
 
-def save_content_asset(asset: ContentAsset) -> ContentAsset:
+def save_content_asset(asset: ContentAsset, owner_id: str = DEFAULT_OWNER_ID) -> ContentAsset:
     asset.updated_at = _now()
-    _upsert("content_assets", asset.id, asdict(asset))
+    _upsert("content_assets", asset.id, asdict(asset), owner_id=owner_id)
     return asset
 
 
-def delete_content_asset(asset_id: str) -> bool:
+def delete_content_asset(asset_id: str, owner_id: str = DEFAULT_OWNER_ID) -> bool:
     conn = _connect()
     try:
-        cursor = conn.execute("DELETE FROM content_assets WHERE id = ?", (asset_id,))
-        conn.execute("DELETE FROM content_versions WHERE asset_id = ?", (asset_id,))
-        conn.execute("DELETE FROM performance_records WHERE asset_id = ?", (asset_id,))
+        cursor = conn.execute("DELETE FROM content_assets WHERE id = ? AND owner_id = ?", (asset_id, owner_id))
+        conn.execute("DELETE FROM content_versions WHERE asset_id = ? AND owner_id = ?", (asset_id, owner_id))
+        conn.execute("DELETE FROM performance_records WHERE asset_id = ? AND owner_id = ?", (asset_id, owner_id))
         conn.commit()
         return cursor.rowcount > 0
     finally:
         conn.close()
 
 
-def list_content_versions(asset_id: str) -> list[ContentVersion]:
+def list_content_versions(asset_id: str, owner_id: str = DEFAULT_OWNER_ID) -> list[ContentVersion]:
     conn = _connect()
     try:
-        rows = conn.execute("SELECT data FROM content_versions WHERE asset_id = ? ORDER BY version DESC", (asset_id,)).fetchall()
+        rows = conn.execute(
+            "SELECT data FROM content_versions WHERE asset_id = ? AND owner_id = ? ORDER BY version DESC",
+            (asset_id, owner_id),
+        ).fetchall()
         return [ContentVersion(**json.loads(row["data"])) for row in rows]
     finally:
         conn.close()
 
 
-def get_current_version(asset_id: str) -> ContentVersion | None:
-    versions = list_content_versions(asset_id)
+def get_current_version(asset_id: str, owner_id: str = DEFAULT_OWNER_ID) -> ContentVersion | None:
+    versions = list_content_versions(asset_id, owner_id)
     return versions[0] if versions else None
 
 
-def save_knowledge_source(source: KnowledgeSource) -> KnowledgeSource:
+def save_knowledge_source(source: KnowledgeSource, owner_id: str = DEFAULT_OWNER_ID) -> KnowledgeSource:
     source.updated_at = _now()
-    _upsert("knowledge_sources", source.id, asdict(source))
+    _upsert("knowledge_sources", source.id, asdict(source), owner_id=owner_id)
     return source
 
 
-def list_knowledge_sources(platform: str | None = None) -> list[KnowledgeSource]:
-    sources = _list("knowledge_sources", KnowledgeSource)
+def list_knowledge_sources(platform: str | None = None, owner_id: str = DEFAULT_OWNER_ID) -> list[KnowledgeSource]:
+    sources = _list("knowledge_sources", KnowledgeSource, owner_id=owner_id)
     return [source for source in sources if not platform or not source.platform or source.platform == platform]
 
 
-def create_agent_task(objective: str) -> AgentTask:
+def create_agent_task(objective: str, owner_id: str = DEFAULT_OWNER_ID) -> AgentTask:
     steps = [
         {"name": "读取品牌与商品事实", "status": "completed"},
         {"name": "检索平台知识来源", "status": "completed"},
@@ -354,42 +384,45 @@ def create_agent_task(objective: str) -> AgentTask:
         {"name": "记录发布效果", "status": "pending"},
     ]
     task = AgentTask(objective=objective, steps=steps)
-    _upsert("agent_tasks", task.id, asdict(task), "created_at")
+    _upsert("agent_tasks", task.id, asdict(task), "created_at", owner_id)
     return task
 
 
-def complete_agent_task(task: AgentTask, result_summary: str) -> AgentTask:
+def complete_agent_task(task: AgentTask, result_summary: str, owner_id: str = DEFAULT_OWNER_ID) -> AgentTask:
     task.status = "completed"
     task.result_summary = result_summary
     for step in task.steps:
         if step["name"] != "记录发布效果":
             step["status"] = "completed"
-    _upsert("agent_tasks", task.id, asdict(task), "created_at")
+    _upsert("agent_tasks", task.id, asdict(task), "created_at", owner_id)
     return task
 
 
-def fail_agent_task(task: AgentTask, error: str) -> AgentTask:
+def fail_agent_task(task: AgentTask, error: str, owner_id: str = DEFAULT_OWNER_ID) -> AgentTask:
     task.status = "failed"
     task.result_summary = error[:300]
     for step in task.steps:
         if step["status"] == "pending":
             step["status"] = "failed"
             break
-    _upsert("agent_tasks", task.id, asdict(task), "created_at")
+    _upsert("agent_tasks", task.id, asdict(task), "created_at", owner_id)
     return task
 
 
-def list_agent_tasks() -> list[AgentTask]:
-    return _list("agent_tasks", AgentTask, "created_at")
+def list_agent_tasks(owner_id: str = DEFAULT_OWNER_ID) -> list[AgentTask]:
+    return _list("agent_tasks", AgentTask, "created_at", owner_id)
 
 
-def save_performance(record: PerformanceRecord) -> PerformanceRecord:
+def save_performance(record: PerformanceRecord, owner_id: str = DEFAULT_OWNER_ID) -> PerformanceRecord:
     conn = _connect()
     try:
+        existing = conn.execute("SELECT owner_id FROM performance_records WHERE id = ?", (record.id,)).fetchone()
+        if existing and existing["owner_id"] != owner_id:
+            raise ValueError("效果记录不属于当前用户")
         conn.execute(
-            "INSERT INTO performance_records (id, asset_id, data, recorded_at) VALUES (?, ?, ?, ?) "
+            "INSERT INTO performance_records (id, owner_id, asset_id, data, recorded_at) VALUES (?, ?, ?, ?, ?) "
             "ON CONFLICT(id) DO UPDATE SET asset_id = excluded.asset_id, data = excluded.data, recorded_at = excluded.recorded_at",
-            (record.id, record.asset_id, json.dumps(asdict(record), ensure_ascii=False), record.recorded_at),
+            (record.id, owner_id, record.asset_id, json.dumps(asdict(record), ensure_ascii=False), record.recorded_at),
         )
         conn.commit()
     finally:
@@ -397,14 +430,18 @@ def save_performance(record: PerformanceRecord) -> PerformanceRecord:
     return record
 
 
-def save_performance_batch(records: list[PerformanceRecord]) -> None:
+def save_performance_batch(records: list[PerformanceRecord], owner_id: str = DEFAULT_OWNER_ID) -> None:
     conn = _connect()
     try:
+        for record in records:
+            existing = conn.execute("SELECT owner_id FROM performance_records WHERE id = ?", (record.id,)).fetchone()
+            if existing and existing["owner_id"] != owner_id:
+                raise ValueError("效果记录不属于当前用户")
         conn.executemany(
-            "INSERT INTO performance_records (id, asset_id, data, recorded_at) VALUES (?, ?, ?, ?) "
+            "INSERT INTO performance_records (id, owner_id, asset_id, data, recorded_at) VALUES (?, ?, ?, ?, ?) "
             "ON CONFLICT(id) DO UPDATE SET asset_id = excluded.asset_id, data = excluded.data, recorded_at = excluded.recorded_at",
             [
-                (record.id, record.asset_id, json.dumps(asdict(record), ensure_ascii=False), record.recorded_at)
+                (record.id, owner_id, record.asset_id, json.dumps(asdict(record), ensure_ascii=False), record.recorded_at)
                 for record in records
             ],
         )
@@ -413,13 +450,13 @@ def save_performance_batch(records: list[PerformanceRecord]) -> None:
         conn.close()
 
 
-def list_performance(asset_id: str | None = None) -> list[PerformanceRecord]:
-    records = _list("performance_records", PerformanceRecord, "recorded_at")
+def list_performance(asset_id: str | None = None, owner_id: str = DEFAULT_OWNER_ID) -> list[PerformanceRecord]:
+    records = _list("performance_records", PerformanceRecord, "recorded_at", owner_id)
     return [record for record in records if not asset_id or record.asset_id == asset_id]
 
 
-def build_performance_insights() -> dict[str, int | float | str]:
-    records = list_performance()
+def build_performance_insights(owner_id: str = DEFAULT_OWNER_ID) -> dict[str, int | float | str]:
+    records = list_performance(owner_id=owner_id)
     if not records:
         return {
             "records": 0, "impressions": 0, "clicks": 0, "add_to_carts": 0, "orders": 0,
@@ -490,52 +527,56 @@ def compute_winner(experiment: Experiment) -> Experiment:
     return experiment
 
 
-def save_experiment(experiment: Experiment) -> Experiment:
+def save_experiment(experiment: Experiment, owner_id: str = DEFAULT_OWNER_ID) -> Experiment:
     compute_winner(experiment)
     experiment.updated_at = _now()
-    _upsert("experiments", experiment.id, asdict(experiment))
+    _upsert("experiments", experiment.id, asdict(experiment), owner_id=owner_id)
     return experiment
 
 
-def list_experiments(product_id: str | None = None) -> list[Experiment]:
-    experiments = _list("experiments", Experiment)
+def list_experiments(product_id: str | None = None, owner_id: str = DEFAULT_OWNER_ID) -> list[Experiment]:
+    experiments = _list("experiments", Experiment, owner_id=owner_id)
     return [compute_winner(e) for e in experiments if not product_id or e.product_id == product_id]
 
 
-def get_experiment(experiment_id: str) -> Experiment | None:
-    return _get("experiments", experiment_id, Experiment)
+def get_experiment(experiment_id: str, owner_id: str = DEFAULT_OWNER_ID) -> Experiment | None:
+    return _get("experiments", experiment_id, Experiment, owner_id=owner_id)
 
 
-def delete_experiment(experiment_id: str) -> bool:
+def delete_experiment(experiment_id: str, owner_id: str = DEFAULT_OWNER_ID) -> bool:
     conn = _connect()
     try:
-        cursor = conn.execute("DELETE FROM experiments WHERE id = ?", (experiment_id,))
+        cursor = conn.execute("DELETE FROM experiments WHERE id = ? AND owner_id = ?", (experiment_id, owner_id))
         conn.commit()
         return cursor.rowcount > 0
     finally:
         conn.close()
 
 
-def save_action_state(action_id: str, state: str, metric_snapshot: str = "") -> None:
+def save_action_state(action_id: str, state: str, metric_snapshot: str = "", owner_id: str = DEFAULT_OWNER_ID) -> None:
     conn = _connect()
     try:
         now_str = _now()
+        scoped_id = f"{owner_id}:{action_id}"
         conn.execute(
-            "INSERT INTO operations_actions (id, state, last_updated_at, metric_snapshot) VALUES (?, ?, ?, ?) "
+            "INSERT INTO operations_actions (id, owner_id, state, last_updated_at, metric_snapshot) VALUES (?, ?, ?, ?, ?) "
             "ON CONFLICT(id) DO UPDATE SET state = excluded.state, last_updated_at = excluded.last_updated_at, metric_snapshot = excluded.metric_snapshot",
-            (action_id, state, now_str, metric_snapshot),
+            (scoped_id, owner_id, state, now_str, metric_snapshot),
         )
         conn.commit()
     finally:
         conn.close()
 
 
-def get_action_states() -> dict[str, dict]:
+def get_action_states(owner_id: str = DEFAULT_OWNER_ID) -> dict[str, dict]:
     conn = _connect()
     try:
-        rows = conn.execute("SELECT id, state, last_updated_at, metric_snapshot FROM operations_actions").fetchall()
+        rows = conn.execute(
+            "SELECT id, state, last_updated_at, metric_snapshot FROM operations_actions WHERE owner_id = ?",
+            (owner_id,),
+        ).fetchall()
         return {
-            row["id"]: {
+            row["id"].split(":", 1)[1] if row["id"].startswith(f"{owner_id}:") else row["id"]: {
                 "state": row["state"],
                 "last_updated_at": row["last_updated_at"],
                 "metric_snapshot": row["metric_snapshot"],
@@ -546,10 +587,10 @@ def get_action_states() -> dict[str, dict]:
         conn.close()
 
 
-def delete_action_state(action_id: str) -> None:
+def delete_action_state(action_id: str, owner_id: str = DEFAULT_OWNER_ID) -> None:
     conn = _connect()
     try:
-        conn.execute("DELETE FROM operations_actions WHERE id = ?", (action_id,))
+        conn.execute("DELETE FROM operations_actions WHERE id = ? AND owner_id = ?", (f"{owner_id}:{action_id}", owner_id))
         conn.commit()
     finally:
         conn.close()

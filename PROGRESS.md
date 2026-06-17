@@ -1,6 +1,6 @@
 # ShopGenie — 进度台账
 
-> 最后更新：2026-06-15
+> 最后更新：2026-06-17
 > 当前阶段：V1.5 与运营闭环首版可用；商品图工作室前端已下线
 
 ---
@@ -10,6 +10,8 @@
 V1.5 已具备三平台生成、商品事实库、内容版本、质量闭环、可引用公开知识来源、可执行 Agent 任务和效果反馈。抖音现已区分短视频脚本与小店商品文案：脚本按完整分镜强校验，商品文案按标题、详情与卖点段落独立校验。跨平台生成请求会先要求用户选择转换为当前平台或新建目标平台会话。
 
 产品范围已重新聚焦内容与运营闭环：商品图工作室从欢迎页、导航、会话恢复、平台选择和前端代码中下线；后端 Studio/视觉实验代码暂时保留，后续重新立项前不作为当前能力维护或验收。
+
+2026-06-17 完成多用户鉴权隔离基础设施：生产可通过 `SHOPGENIE_AUTH_TOKENS_JSON` 配置 Bearer token 到稳定用户 ID 的映射；本地未配置 token 时继续兼容 `X-User-Id` 开发切用户。品牌档案、商品、会话、内容资产/版本、知识源、任务、效果数据、A/B 实验、运营建议状态、CSV 导入、平台连接器与生成 Prompt 上下文均按 owner 隔离。已确认线上 SSH 可达，nginx 与 8000 后端健康；线上仍为手动 uvicorn 进程，且生产仓库 ahead `origin/main` 3 个提交。
 
 主干已切换为 `main`（GitHub 默认分支，`feat/frontend-v3-polish` 同步跟随）。**V2 运营增长闭环已落两个增量**：①「评论反哺」粘贴买家评价→提炼洞察（认可/顾虑/原声/踩雷）→注入生成（已上线生产）；②「A/B + 效果回写闭环」一键生成标题/钩子变体→回填曝光转化→判定赢家→赢家风格反哺生成（已合并 main，待部署）。后端 83 测试通过。服务器改为 git over SSH 只读部署密钥同步。
 
@@ -61,6 +63,14 @@ V1.5 已具备三平台生成、商品事实库、内容版本、质量闭环、
 ---
 
 ## 执行日志
+
+### 2026-06-17（多用户鉴权隔离 + 线上 SSH 状态）
+- 新增 `auth.py`：配置 `SHOPGENIE_AUTH_TOKENS_JSON` 后，除 `/health` 外的 API 需要 `Authorization: Bearer <token>`；token 映射到稳定 `owner_id`。未配置时保留本地开发模式 `X-User-Id`，避免打断单机 demo 与测试。
+- SQLite 业务表新增/迁移 `owner_id`，旧数据归属 `default`；商品、档案、会话、内容资产/版本、知识源、Agent 任务、效果数据、A/B 实验和运营建议状态全部按 owner 读写。会话 ID、内容/效果记录等跨用户冲突不再允许静默覆盖。
+- 生成链路补齐隔离：普通聊天、流式聊天、批量生成、内容修订、Agent 任务、知识检索、历史效果、A/B 赢家和内容历史 Prompt 均只读取当前 owner 数据。
+- 前端 API 统一鉴权头：有 `auth_token`/`NEXT_PUBLIC_SHOPGENIE_API_TOKEN` 时发送 Bearer token，否则继续发送开发用 `X-User-Id`。
+- 线上 SSH 状态：`root@47.99.131.123` / `root@liujufu.com` 可登录；nginx 80/443 正常，uvicorn 8000 正常，`/health` 本机与公网均 200；服务器到 GitHub SSH 正常。风险：线上 `/var/www/shopgenie` ahead `origin/main` 3 个提交，存在未跟踪 `backend/app/test_ab_testing.py`、`backend/app/test_review_mining.py`、`backend/uvicorn.out`；后端仍是手动 uvicorn 非 systemd/pm2。
+- 验证：后端 `127 passed`；前端 `41 passed`；前端生产 build 通过。
 
 ### 2026-06-15（抖音入口拆分、首屏加载与品牌图标）
 - 欢迎页抖音快捷创作拆为“抖音短视频脚本”和“抖音商品文案”，分别预填明确需求并复用后端独立内容类型契约。

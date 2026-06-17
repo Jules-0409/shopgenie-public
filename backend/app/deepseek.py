@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 
 from app.config import Settings
+from app.auth import DEFAULT_OWNER_ID
 from app.memory import UserProfile, build_memory_prompt
 from app.postprocess import post_process
 from app.platform_validator import build_cross_platform_choice, validate_platform_content
@@ -35,11 +36,13 @@ class DeepSeekClient:
         client: httpx.AsyncClient | None = None,
         profile: UserProfile | None = None,
         product: Product | None = None,
+        owner_id: str = DEFAULT_OWNER_ID,
     ) -> None:
         self.settings = settings
         self._client = client
         self._profile = profile
         self._product = product
+        self._owner_id = owner_id
 
     async def chat(self, request: ChatRequest) -> ChatResponse:
         cross_platform_choice = build_cross_platform_choice(request)
@@ -58,16 +61,16 @@ class DeepSeekClient:
         product_prompt = build_product_prompt(self._product)
         if product_prompt:
             system_prompt = f"{system_prompt}\n\n{product_prompt}"
-        knowledge_prompt = build_knowledge_prompt(request.platform, request.message)
+        knowledge_prompt = build_knowledge_prompt(request.platform, request.message, self._owner_id)
         if knowledge_prompt:
             system_prompt = f"{system_prompt}\n\n{knowledge_prompt}"
-        performance_prompt = build_performance_prompt(request.product_id, request.platform)
+        performance_prompt = build_performance_prompt(request.product_id, request.platform, self._owner_id)
         if performance_prompt:
             system_prompt = f"{system_prompt}\n\n{performance_prompt}"
-        experiment_prompt = build_experiment_prompt(request.product_id, request.platform)
+        experiment_prompt = build_experiment_prompt(request.product_id, request.platform, self._owner_id)
         if experiment_prompt:
             system_prompt = f"{system_prompt}\n\n{experiment_prompt}"
-        content_history_prompt = build_content_history_prompt(request.product_id, request.platform)
+        content_history_prompt = build_content_history_prompt(request.product_id, request.platform, self._owner_id)
         if content_history_prompt:
             system_prompt = f"{system_prompt}\n\n{content_history_prompt}"
         # Competitive analysis: search for similar content patterns
@@ -121,7 +124,7 @@ class DeepSeekClient:
             warnings = (warnings or []) + contract_warnings
         sources = [
             {"id": source.id, "title": source.title, "url": source.url}
-            for source in retrieve_knowledge(request.platform, request.message)
+            for source in retrieve_knowledge(request.platform, request.message, owner_id=self._owner_id)
         ]
         return ChatResponse(message=message, result=result, questions=questions, warnings=warnings, conversation_title=conversation_title, model=self.settings.deepseek_model, usage=usage, sources=sources)
 
@@ -382,16 +385,16 @@ class DeepSeekClient:
         product_prompt = build_product_prompt(self._product)
         if product_prompt:
             system_prompt = f"{system_prompt}\n\n{product_prompt}"
-        knowledge_prompt = build_knowledge_prompt(request.platform, request.message)
+        knowledge_prompt = build_knowledge_prompt(request.platform, request.message, self._owner_id)
         if knowledge_prompt:
             system_prompt = f"{system_prompt}\n\n{knowledge_prompt}"
-        performance_prompt = build_performance_prompt(request.product_id, request.platform)
+        performance_prompt = build_performance_prompt(request.product_id, request.platform, self._owner_id)
         if performance_prompt:
             system_prompt = f"{system_prompt}\n\n{performance_prompt}"
-        experiment_prompt = build_experiment_prompt(request.product_id, request.platform)
+        experiment_prompt = build_experiment_prompt(request.product_id, request.platform, self._owner_id)
         if experiment_prompt:
             system_prompt = f"{system_prompt}\n\n{experiment_prompt}"
-        content_history_prompt = build_content_history_prompt(request.product_id, request.platform)
+        content_history_prompt = build_content_history_prompt(request.product_id, request.platform, self._owner_id)
         if content_history_prompt:
             system_prompt = f"{system_prompt}\n\n{content_history_prompt}"
         # Competitive analysis
