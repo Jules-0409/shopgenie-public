@@ -240,6 +240,7 @@ export const EMPTY_PROFILE: UserProfile = {
 
 export interface AuthUser {
   user_id: string;
+  token?: string | null;
 }
 
 export function setAuthToken(token: string): void {
@@ -267,6 +268,32 @@ export async function loginWithAccessCode(accessCode: string): Promise<AuthUser>
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { detail?: string } | null;
     throw new Error(body?.detail ?? '访问码无效');
+  }
+  return response.json() as Promise<AuthUser>;
+}
+
+export async function loginWithPassword(username: string, password: string): Promise<AuthUser> {
+  const response = await fetch('/shopgenie/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: string } | null;
+    throw new Error(body?.detail ?? '账号或密码错误');
+  }
+  return response.json() as Promise<AuthUser>;
+}
+
+export async function registerAccount(username: string, password: string): Promise<AuthUser> {
+  const response = await fetch('/shopgenie/api/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { detail?: string } | null;
+    throw new Error(body?.detail ?? '注册失败');
   }
   return response.json() as Promise<AuthUser>;
 }

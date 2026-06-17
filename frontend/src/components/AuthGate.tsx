@@ -7,7 +7,8 @@ import {
   clearAuthToken,
   getAuthToken,
   getCurrentAuthUser,
-  loginWithAccessCode,
+  loginWithPassword,
+  registerAccount,
   setAuthToken,
   type AuthUser,
 } from '@/lib/api';
@@ -19,7 +20,9 @@ interface AuthGateProps {
 export default function AuthGate({ children }: AuthGateProps) {
   const [checking, setChecking] = useState(true);
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [accessCode, setAccessCode] = useState('');
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -40,20 +43,23 @@ export default function AuthGate({ children }: AuthGateProps) {
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const code = accessCode.trim();
-    if (!code) {
-      setError('请输入访问码');
+    const cleanUsername = username.trim();
+    if (!cleanUsername || !password) {
+      setError('请输入账号和密码');
       return;
     }
     setSubmitting(true);
     setError('');
     try {
-      const nextUser = await loginWithAccessCode(code);
-      setAuthToken(code);
+      const nextUser = mode === 'register'
+        ? await registerAccount(cleanUsername, password)
+        : await loginWithPassword(cleanUsername, password);
+      if (!nextUser.token) throw new Error('登录响应缺少 token');
+      setAuthToken(nextUser.token);
       setUser(nextUser);
-      setAccessCode('');
+      setPassword('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : '访问码无效');
+      setError(err instanceof Error ? err.message : '登录失败');
       clearAuthToken();
     } finally {
       setSubmitting(false);
@@ -83,22 +89,36 @@ export default function AuthGate({ children }: AuthGateProps) {
             <span className="brand-mark"><BrandMark s={24} /></span>
             <div>
               <h1>ShopGenie</h1>
-              <p>输入访问码进入你的运营工作台</p>
+              <p>{mode === 'login' ? '登录你的运营工作台' : '创建一个新的商家账号'}</p>
             </div>
           </div>
+          <div className="auth-tabs" role="tablist" aria-label="登录方式">
+            <button className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setError(''); }} type="button">登录</button>
+            <button className={mode === 'register' ? 'active' : ''} onClick={() => { setMode('register'); setError(''); }} type="button">注册</button>
+          </div>
           <label className="auth-field">
-            <span>访问码</span>
+            <span>账号</span>
             <input
               autoFocus
+              autoComplete="username"
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+              placeholder="字母、数字、下划线或短横线"
+            />
+          </label>
+          <label className="auth-field">
+            <span>密码</span>
+            <input
+              autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
               type="password"
-              value={accessCode}
-              onChange={(event) => setAccessCode(event.target.value)}
-              placeholder="请输入访问码"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder={mode === 'register' ? '至少 6 位' : '请输入密码'}
             />
           </label>
           {error && <div className="auth-error">{error}</div>}
           <button className="auth-submit" disabled={submitting} type="submit">
-            {submitting ? '正在进入...' : '进入 ShopGenie'}
+            {submitting ? '处理中...' : mode === 'login' ? '登录' : '注册并进入'}
           </button>
         </form>
       </div>

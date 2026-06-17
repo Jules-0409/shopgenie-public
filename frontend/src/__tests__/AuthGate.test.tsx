@@ -1,14 +1,15 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AuthGate from '@/components/AuthGate';
-import { getCurrentAuthUser, loginWithAccessCode } from '@/lib/api';
+import { getCurrentAuthUser, loginWithPassword, registerAccount } from '@/lib/api';
 
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
   return {
     ...actual,
     getCurrentAuthUser: vi.fn(),
-    loginWithAccessCode: vi.fn(),
+    loginWithPassword: vi.fn(),
+    registerAccount: vi.fn(),
   };
 });
 
@@ -29,23 +30,38 @@ describe('AuthGate', () => {
     });
   });
 
-  it('shows login form before a valid access code is submitted', async () => {
+  it('shows login form before credentials are submitted', async () => {
     render(<AuthGate><div>inside app</div></AuthGate>);
 
     expect(await screen.findByText('ShopGenie')).toBeInTheDocument();
     expect(screen.queryByText('inside app')).not.toBeInTheDocument();
   });
 
-  it('enters the app after access code login succeeds', async () => {
-    vi.mocked(loginWithAccessCode).mockResolvedValue({ user_id: 'merchant_a' });
+  it('enters the app after password login succeeds', async () => {
+    vi.mocked(loginWithPassword).mockResolvedValue({ user_id: 'merchant_a', token: 'signed-token' });
 
     render(<AuthGate><div>inside app</div></AuthGate>);
-    fireEvent.change(await screen.findByPlaceholderText('请输入访问码'), { target: { value: 'token-a' } });
-    fireEvent.click(screen.getByRole('button', { name: '进入 ShopGenie' }));
+    fireEvent.change(await screen.findByPlaceholderText('字母、数字、下划线或短横线'), { target: { value: 'merchant_a' } });
+    fireEvent.change(screen.getByPlaceholderText('请输入密码'), { target: { value: 'secret123' } });
+    fireEvent.click(screen.getAllByRole('button', { name: '登录' })[1]);
 
     await waitFor(() => expect(screen.getByText('inside app')).toBeInTheDocument());
-    expect(loginWithAccessCode).toHaveBeenCalledWith('token-a');
-    expect(window.localStorage.setItem).toHaveBeenCalledWith('shopgenie.auth_token', 'token-a');
+    expect(loginWithPassword).toHaveBeenCalledWith('merchant_a', 'secret123');
+    expect(window.localStorage.setItem).toHaveBeenCalledWith('shopgenie.auth_token', 'signed-token');
+  });
+
+  it('registers a new account from the register tab', async () => {
+    vi.mocked(registerAccount).mockResolvedValue({ user_id: 'merchant_b', token: 'new-token' });
+
+    render(<AuthGate><div>inside app</div></AuthGate>);
+    fireEvent.click(await screen.findByRole('button', { name: '注册' }));
+    fireEvent.change(screen.getByPlaceholderText('字母、数字、下划线或短横线'), { target: { value: 'merchant_b' } });
+    fireEvent.change(screen.getByPlaceholderText('至少 6 位'), { target: { value: 'secret123' } });
+    fireEvent.click(screen.getByRole('button', { name: '注册并进入' }));
+
+    await waitFor(() => expect(screen.getByText('inside app')).toBeInTheDocument());
+    expect(registerAccount).toHaveBeenCalledWith('merchant_b', 'secret123');
+    expect(window.localStorage.setItem).toHaveBeenCalledWith('shopgenie.auth_token', 'new-token');
   });
 
   it('uses an existing token to validate the session', async () => {

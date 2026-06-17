@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     dashscope_api_key: str = Field(default="")
     platform_api_connectors_json: str = Field(default="{}")
     shopgenie_auth_tokens_json: str = Field(default="")
+    shopgenie_auth_secret: str = Field(default="dev-shopgenie-auth-secret-change-me")
 
 
 @lru_cache

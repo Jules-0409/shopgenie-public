@@ -1,7 +1,12 @@
 """请求鉴权与用户隔离上下文。"""
+import base64
+import hmac
+import hashlib
 import json
 import re
+import time
 from dataclasses import dataclass
+from typing import Any
 
 from fastapi import Header, HTTPException, Depends
 
@@ -14,6 +19,14 @@ USER_ID_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$")
 @dataclass(frozen=True)
 class CurrentUser:
     id: str
+
+
+def _b64encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).decode().rstrip("=")
+
+
+def _b64decode(data: str) -> bytes:
+    return base64.urlsafe_b64decode(data + "=" * (-len(data) % 4))
 
 
 def normalize_user_id(value: str | None) -> str:
@@ -54,14 +67,62 @@ def resolve_token_user(token: str, settings: Settings) -> CurrentUser | None:
     return CurrentUser(id=normalize_user_id(clean))
 
 
+def create_signed_token(user_id: str, settings: Settings) -> str:
+    payload = {
+        "sub": normalize_user_id(user_id),
+        "iat": int(time.time()),
+    }
+    payload_part = _b64encode(json.dumps(payload, separators=(",", ":")).encode())
+    signature = hmac.new(
+        settings.shopgenie_auth_secret.encode(),
+        payload_part.encode(),
+        hashlib.sha256,
+    ).digest()
+    return f"sg1.{payload_part}.{_b64encode(signature)}"
+
+
+def verify_signed_token(token: str, settings: Settings) -> CurrentUser | None:
+    try:
+        prefix, payload_part, signature_part = token.split(".", 2)
+    except ValueError:
+        return None
+    if prefix != "sg1":
+        return None
+    expected = hmac.new(
+        settings.shopgenie_auth_secret.encode(),
+        payload_part.encode(),
+        hashlib.sha256,
+    ).digest()
+    try:
+        received = _b64decode(signature_part)
+    except (ValueError, TypeError):
+        return None
+    if not hmac.compare_digest(received, expected):
+        return None
+    try:
+        payload: dict[str, Any] = json.loads(_b64decode(payload_part))
+    except (json.JSONDecodeError, ValueError, TypeError):
+        return None
+    subject = payload.get("sub")
+    if not isinstance(subject, str):
+        return None
+    return CurrentUser(id=normalize_user_id(subject))
+
+
 def get_current_user(
     authorization: str | None = Header(default=None),
     x_user_id: str | None = Header(default=None, alias="X-User-Id"),
     settings: Settings = Depends(get_settings),
 ) -> CurrentUser:
     token_map = _load_token_map(settings)
+    scheme, _, token = (authorization or "").partition(" ")
+    if token:
+        if scheme.lower() != "bearer":
+            raise HTTPException(status_code=401, detail="缺少 Bearer 鉴权令牌")
+        signed_user = verify_signed_token(token.strip(), settings)
+        if signed_user:
+            return signed_user
     if token_map:
-        scheme, _, token = (authorization or "").partition(" ")
         if scheme.lower() != "bearer" or not token:
             raise HTTPException(status_code=401, detail="缺少 Bearer 鉴权令牌")
         user = resolve_token_user(token, settings)

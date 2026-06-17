@@ -48,8 +48,36 @@ def test_login_validates_access_code_and_me_uses_bearer_token(tmp_path: Path) ->
 
     assert bad.status_code == 401
     assert login.status_code == 200
-    assert login.json() == {"user_id": "merchant_a"}
-    assert me.json() == {"user_id": "merchant_a"}
+    assert login.json() == {"user_id": "merchant_a", "token": "token-a"}
+    assert me.json() == {"user_id": "merchant_a", "token": None}
+
+
+def test_register_login_and_signed_token_isolate_data(tmp_path: Path) -> None:
+    memory.DB_PATH = tmp_path / "accounts.db"
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        deepseek_api_key="test-key",
+        shopgenie_auth_secret="test-secret",
+    )
+    try:
+        with TestClient(app) as client:
+            registered = client.post("/api/auth/register", json={"username": "MerchantA", "password": "secret123"})
+            duplicate = client.post("/api/auth/register", json={"username": "merchanta", "password": "secret123"})
+            bad_login = client.post("/api/auth/login", json={"username": "merchanta", "password": "wrong123"})
+            login = client.post("/api/auth/login", json={"username": "merchanta", "password": "secret123"})
+            token = login.json()["token"]
+            product = client.post("/api/products", headers=_headers(token), json={"name": "账号商品"})
+            products = client.get("/api/products", headers=_headers(token))
+    finally:
+        app.dependency_overrides.clear()
+
+    assert registered.status_code == 200
+    assert registered.json()["user_id"] == "merchanta"
+    assert registered.json()["token"].startswith("sg1.")
+    assert duplicate.status_code == 422
+    assert bad_login.status_code == 401
+    assert login.status_code == 200
+    assert product.status_code == 200
+    assert products.json()[0]["name"] == "账号商品"
 
 
 def test_products_profiles_and_sessions_are_isolated_by_token(tmp_path: Path) -> None:

@@ -11,7 +11,8 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import StreamingResponse
 
-from app.auth import CurrentUser, get_current_user, resolve_token_user
+from app.accounts import authenticate_account, create_account
+from app.auth import CurrentUser, create_signed_token, get_current_user, resolve_token_user
 from app.config import Settings, get_settings
 from app.deepseek import DeepSeekClient, DeepSeekError
 from app.stream import chat_stream_generator
@@ -82,19 +83,43 @@ async def health() -> dict[str, str]:
 
 
 class LoginRequest(BaseModel):
-    access_code: str = Field(min_length=1, max_length=200)
+    username: str | None = Field(default=None, min_length=1, max_length=64)
+    password: str | None = Field(default=None, min_length=1, max_length=200)
+    access_code: str | None = Field(default=None, min_length=1, max_length=200)
+
+
+class RegisterRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=6, max_length=200)
 
 
 class AuthUserResponse(BaseModel):
     user_id: str
+    token: str | None = None
 
 
 @app.post("/api/auth/login", response_model=AuthUserResponse)
 async def api_login(req: LoginRequest, settings: Settings = Depends(get_settings)) -> AuthUserResponse:
-    user = resolve_token_user(req.access_code, settings)
-    if not user:
-        raise HTTPException(status_code=401, detail="访问码无效")
-    return AuthUserResponse(user_id=user.id)
+    if req.username and req.password:
+        account = await run_in_threadpool(authenticate_account, req.username, req.password)
+        if not account:
+            raise HTTPException(status_code=401, detail="账号或密码错误")
+        return AuthUserResponse(user_id=account.owner_id, token=create_signed_token(account.owner_id, settings))
+    if req.access_code:
+        user = resolve_token_user(req.access_code, settings)
+        if not user:
+            raise HTTPException(status_code=401, detail="访问码无效")
+        return AuthUserResponse(user_id=user.id, token=req.access_code)
+    raise HTTPException(status_code=422, detail="请输入账号密码或访问码")
+
+
+@app.post("/api/auth/register", response_model=AuthUserResponse)
+async def api_register(req: RegisterRequest, settings: Settings = Depends(get_settings)) -> AuthUserResponse:
+    try:
+        account = await run_in_threadpool(create_account, req.username, req.password)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return AuthUserResponse(user_id=account.owner_id, token=create_signed_token(account.owner_id, settings))
 
 
 @app.get("/api/auth/me", response_model=AuthUserResponse)

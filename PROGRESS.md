@@ -69,9 +69,9 @@ V1.5 已具备三平台生成、商品事实库、内容版本、质量闭环、
 - SQLite 业务表新增/迁移 `owner_id`，旧数据归属 `default`；商品、档案、会话、内容资产/版本、知识源、Agent 任务、效果数据、A/B 实验和运营建议状态全部按 owner 读写。会话 ID、内容/效果记录等跨用户冲突不再允许静默覆盖。
 - 生成链路补齐隔离：普通聊天、流式聊天、批量生成、内容修订、Agent 任务、知识检索、历史效果、A/B 赢家和内容历史 Prompt 均只读取当前 owner 数据。
 - 前端 API 统一鉴权头：有 `auth_token`/`NEXT_PUBLIC_SHOPGENIE_API_TOKEN` 时发送 Bearer token，否则继续发送开发用 `X-User-Id`。
-- 新增最小登录系统：`/api/auth/login` 验证访问码，`/api/auth/me` 校验当前 token；前端 `AuthGate` 在未登录时显示访问码登录页，登录后再挂载应用，退出会清本地 token、草稿和会话缓存。
+- 新增最小登录系统：`/api/auth/register` 支持账号密码注册（不验证邮箱），密码以 PBKDF2 哈希保存；`/api/auth/login` 支持账号密码登录并返回签名 token，兼容旧访问码；`/api/auth/me` 校验当前 token。前端 `AuthGate` 在未登录时显示登录/注册页，登录后再挂载应用，退出会清本地 token、草稿和会话缓存。
 - 线上 SSH 状态：`root@47.99.131.123` / `root@liujufu.com` 可登录；nginx 80/443 正常，uvicorn 8000 正常，`/health` 本机与公网均 200；服务器到 GitHub SSH 正常。风险：线上 `/var/www/shopgenie` ahead `origin/main` 3 个提交，存在未跟踪 `backend/app/test_ab_testing.py`、`backend/app/test_review_mining.py`、`backend/uvicorn.out`；后端仍是手动 uvicorn 非 systemd/pm2。
-- 验证：后端 `128 passed`；前端 `44 passed`；前端生产 build 通过。
+- 验证：后端 `129 passed`；前端 `45 passed`；前端生产 build 通过。
 
 ### 2026-06-15（抖音入口拆分、首屏加载与品牌图标）
 - 欢迎页抖音快捷创作拆为“抖音短视频脚本”和“抖音商品文案”，分别预填明确需求并复用后端独立内容类型契约。
